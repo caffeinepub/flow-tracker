@@ -113,12 +113,14 @@ export function Projections() {
     targetAmount: string;
     currentSaved: string;
     label: string;
+    startDate: string;
   }>({
     subCategoryId: "",
     subCategoryName: "",
     targetAmount: "",
     currentSaved: "",
     label: "",
+    startDate: "",
   });
   const [filterKey, setFilterKey] = useState<FilterKey>("all");
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
@@ -128,12 +130,14 @@ export function Projections() {
     targetAmount: string;
     currentSaved: string;
     label: string;
+    startDate: string;
   }>({
     subCategoryId: "",
     subCategoryName: "",
     targetAmount: "",
     currentSaved: "",
     label: "",
+    startDate: new Date().toISOString().split("T")[0],
   });
 
   // Account pickers for Add / Edit goal dialogs
@@ -307,12 +311,14 @@ export function Projections() {
     }
     const label = goalForm.label.trim() || `${goalForm.subCategoryName} Goal`;
     const currentSavedVal = Number.parseFloat(goalForm.currentSaved) || 0;
+    const todayStr = new Date().toISOString().split("T")[0];
     const newGoal: Omit<Goal, "id"> = {
       subCategoryId: goalForm.subCategoryId,
       subCategoryName: goalForm.subCategoryName,
       targetAmount: amount,
       label,
       currentSaved: currentSavedVal > 0 ? currentSavedVal : undefined,
+      startDate: goalForm.startDate || todayStr,
     };
     addGoalWithAccount(
       newGoal,
@@ -326,6 +332,7 @@ export function Projections() {
       targetAmount: "",
       currentSaved: "",
       label: "",
+      startDate: todayStr,
     });
     setGoalAccountId("__none__");
     toast.success("Goal added!");
@@ -341,6 +348,7 @@ export function Projections() {
     const label =
       editGoalForm.label.trim() || `${editGoalForm.subCategoryName} Goal`;
     const currentSavedVal = Number.parseFloat(editGoalForm.currentSaved) || 0;
+    const todayStr = new Date().toISOString().split("T")[0];
     updateGoalWithAccount(
       editingGoalId,
       {
@@ -349,6 +357,7 @@ export function Projections() {
         targetAmount: amount,
         label,
         currentSaved: currentSavedVal > 0 ? currentSavedVal : undefined,
+        startDate: editGoalForm.startDate || todayStr,
       },
       editGoalAccountId === "__none__"
         ? undefined
@@ -1004,6 +1013,9 @@ export function Projections() {
                                 currentSaved:
                                   goal.currentSaved?.toString() ?? "",
                                 label: goal.label,
+                                startDate:
+                                  goal.startDate ??
+                                  new Date().toISOString().split("T")[0],
                               });
                               setEditGoalAccountId(
                                 goal.alreadySavedAccountId ?? "__none__",
@@ -1399,6 +1411,24 @@ export function Projections() {
                 applied to the account balance.
               </p>
             </div>
+            <div>
+              <Label>Date saved / Goal start date (optional)</Label>
+              <Input
+                type="date"
+                value={editGoalForm.startDate}
+                onChange={(e) =>
+                  setEditGoalForm((prev) => ({
+                    ...prev,
+                    startDate: e.target.value,
+                  }))
+                }
+                className="mt-1"
+                data-ocid="projections.edit_goal_date.input"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Used to timestamp the History record for this contribution.
+              </p>
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button
@@ -1544,6 +1574,24 @@ export function Projections() {
                 </p>
               </div>
             )}
+            <div>
+              <Label>Date saved / Goal start date (optional)</Label>
+              <Input
+                type="date"
+                value={goalForm.startDate}
+                onChange={(e) =>
+                  setGoalForm((prev) => ({
+                    ...prev,
+                    startDate: e.target.value,
+                  }))
+                }
+                className="mt-1"
+                data-ocid="projections.goal_date.input"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Used to timestamp the History record for this contribution.
+              </p>
+            </div>
           </div>
           <DialogFooter className="gap-2">
             <Button

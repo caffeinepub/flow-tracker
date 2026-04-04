@@ -12,6 +12,7 @@ export interface CustomSubCategory {
   icon: string;
   color?: string; // if undefined, inherits parent category color
   pct?: number; // % of parent category budget. If undefined, treat as 0 for display.
+  amountValue?: number; // exact peso amount (source of truth in ₱ mode, avoids % round-trip)
 }
 
 export interface CustomCategory {
@@ -44,6 +45,7 @@ export interface Goal {
   currentSaved?: number; // optional baseline: how much is already saved
   alreadySavedAccountId?: string; // which account the already-saved amount came from
   alreadySavedAmount?: number; // the amount that was credited to the account (for delta calc on edit)
+  startDate?: string; // ISO date string — when the user started saving / contribution date
 }
 
 export interface ProjectionSettings {

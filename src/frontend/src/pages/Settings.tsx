@@ -108,7 +108,7 @@ export function Settings() {
   const handleGlobalModeToggle = (mode: "pct" | "amount") => {
     setGlobalAllocMode(mode);
     if (mode === "amount") {
-      // Pre-populate subAmountInputs with computed values from current pct
+      // Pre-populate subAmountInputs — prefer stored amountValue over pct round-trip
       const newSubInputs: Record<string, string> = {};
       setLocalCats((prev) => {
         const updated = prev.map((c) => {
@@ -117,9 +117,12 @@ export function Settings() {
               ? c.allocationAmount
               : Math.round((currentSalary * c.pct) / 100);
           for (const sub of c.subCategories) {
-            newSubInputs[sub.id] = String(
-              Math.round((catAmt * (sub.pct ?? 0)) / 100),
-            );
+            // Use stored amountValue as source of truth; fall back to pct-derived value
+            const displayAmt =
+              sub.amountValue != null
+                ? sub.amountValue
+                : Math.round((catAmt * (sub.pct ?? 0)) / 100);
+            newSubInputs[sub.id] = String(displayAmt);
           }
           return {
             ...c,
@@ -804,11 +807,14 @@ export function Settings() {
                     {cat.subCategories.map((sub) => {
                       const subPct = sub.pct ?? 0;
                       const subAmount = (catAmount * subPct) / 100;
-                      // In ₱ mode, use the controlled input value
+                      // In ₱ mode, use the controlled input value;
+                      // fall back to stored amountValue to avoid pct round-trip drift
                       const subAmountDisplay =
                         globalAllocMode === "amount"
                           ? (subAmountInputs[sub.id] ??
-                            String(Math.round(subAmount)))
+                            (sub.amountValue != null
+                              ? String(sub.amountValue)
+                              : String(Math.round(subAmount))))
                           : undefined;
                       return (
                         <div key={sub.id} className="space-y-1.5">
@@ -892,7 +898,7 @@ export function Settings() {
                                       0,
                                       Number(val) || 0,
                                     );
-                                    // Back-calculate pct from entered amount relative to cat budget
+                                    // Back-calculate pct for display/compat; store amountValue as truth
                                     const newPct =
                                       catAmount > 0
                                         ? Math.min(
@@ -902,7 +908,10 @@ export function Settings() {
                                             ),
                                           )
                                         : 0;
-                                    updateSub(cat.id, sub.id, { pct: newPct });
+                                    updateSub(cat.id, sub.id, {
+                                      pct: newPct,
+                                      amountValue: enteredAmt,
+                                    });
                                   }}
                                   className="w-20 text-center text-xs font-bold bg-transparent border border-border rounded px-1 py-1 text-foreground"
                                   data-ocid="settings.subcategory.amount.input"

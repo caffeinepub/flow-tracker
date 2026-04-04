@@ -800,7 +800,7 @@ export function useFinanceData() {
   /**
    * Add a goal with optional account linking for "already saved" amount.
    * If accountId and savedAmount are provided, the account balance is credited
-   * directly (no transaction record — this is a one-time past-savings init).
+   * and a "Save to Goal" transaction is logged in History with the goal's startDate.
    */
   const addGoalWithAccount = useCallback(
     (g: Omit<Goal, "id">, accountId?: string, savedAmount?: number) => {
@@ -812,8 +812,8 @@ export function useFinanceData() {
         alreadySavedAmount: hasAccount ? savedAmount : undefined,
       };
       setGoals((prev) => [...prev, newGoal]);
-      // Credit account balance directly — no transaction created
       if (hasAccount && accountId && savedAmount) {
+        // Credit account balance using functional updater (no stale closure)
         setAccounts((prev) =>
           prev.map((acc) =>
             acc.id === accountId
@@ -821,9 +821,29 @@ export function useFinanceData() {
               : acc,
           ),
         );
+        // Log a "Save to Goal" transaction in History so users can see the record
+        const txDate = g.startDate || new Date().toISOString().split("T")[0];
+        // Resolve account name inside a micro-callback to avoid stale render scope
+        setAccounts((prevAccs) => {
+          const accName = prevAccs.find((a) => a.id === accountId)?.name ?? "";
+          setTransactions((prevTxs) => [
+            {
+              id: crypto.randomUUID(),
+              amount: savedAmount,
+              date: txDate,
+              mainCategory: g.subCategoryName,
+              subCategory: g.subCategoryName,
+              description: `Saved toward ${g.label} goal`,
+              type: "income" as const,
+              account: accName,
+            },
+            ...prevTxs,
+          ]);
+          return prevAccs; // do not modify accounts again
+        });
       }
     },
-    [setGoals, setAccounts],
+    [setGoals, setAccounts, setTransactions],
   );
 
   // Backward-compatible wrapper
@@ -836,6 +856,7 @@ export function useFinanceData() {
    * Update a goal with optional account balance delta adjustment.
    * Only the DIFFERENCE between the new alreadySaved and the old alreadySavedAmount
    * is applied to the account, preventing double-counting.
+   * When delta > 0, also logs a "Save to Goal" transaction in History.
    */
   const updateGoalWithAccount = useCallback(
     (id: string, updates: Partial<Goal>, newAccountId?: string) => {
@@ -851,17 +872,40 @@ export function useFinanceData() {
           0;
         const newSaved = Number.isFinite(rawNewSaved) ? rawNewSaved : oldSaved;
         const delta = newSaved - oldSaved;
+        const goalLabel = updates.label ?? existing.label;
 
         // Apply delta to account balance if an account is set
         const targetAccountId = newAccountId || existing.alreadySavedAccountId;
         if (targetAccountId && delta !== 0) {
-          setAccounts((prevAcc) =>
-            prevAcc.map((acc) =>
+          setAccounts((prevAcc) => {
+            const accName =
+              prevAcc.find((a) => a.id === targetAccountId)?.name ?? "";
+            // Log a transaction for positive delta (new savings added)
+            if (delta > 0) {
+              const txDate =
+                updates.startDate ||
+                existing.startDate ||
+                new Date().toISOString().split("T")[0];
+              setTransactions((prevTxs) => [
+                {
+                  id: crypto.randomUUID(),
+                  amount: delta,
+                  date: txDate,
+                  mainCategory: existing.subCategoryName,
+                  subCategory: existing.subCategoryName,
+                  description: `Updated savings toward ${goalLabel} goal`,
+                  type: "income" as const,
+                  account: accName,
+                },
+                ...prevTxs,
+              ]);
+            }
+            return prevAcc.map((acc) =>
               acc.id === targetAccountId
                 ? { ...acc, balance: acc.balance + delta }
                 : acc,
-            ),
-          );
+            );
+          });
         }
 
         const updatedGoal: Goal = {
@@ -875,7 +919,7 @@ export function useFinanceData() {
         return prev.map((g) => (g.id === id ? updatedGoal : g));
       });
     },
-    [setGoals, setAccounts],
+    [setGoals, setAccounts, setTransactions],
   );
 
   // Backward-compatible wrapper

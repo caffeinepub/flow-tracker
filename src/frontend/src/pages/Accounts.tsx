@@ -303,7 +303,7 @@ export function Accounts() {
   const totalLiabilities =
     accounts
       .filter((a) => a.type === "credit")
-      .reduce((s, a) => s + a.balance, 0) + totalIOUsBorrowed;
+      .reduce((s, a) => s + Math.abs(a.balance), 0) + totalIOUsBorrowed;
   const netWorth = totalAssets + totalIOUsOwed - totalLiabilities;
 
   // Transfer history

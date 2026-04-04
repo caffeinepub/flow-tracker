@@ -1,0 +1,17 @@
+{
+  "name": "Flow Tracker",
+  "short_name": "Flow",
+  "description": "Track your income flow every pay period",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0B1220",
+  "background_color": "#0B1220",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

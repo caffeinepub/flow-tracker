@@ -1,0 +1,1039 @@
+import {
+  addDays,
+  addMonths,
+  addWeeks,
+  differenceInDays,
+  format,
+  isWithinInterval,
+  parseISO,
+} from "date-fns";
+import { useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
+import { DEFAULT_CUSTOM_CATEGORIES } from "../data/categories";
+import type {
+  Account,
+  CCAlert,
+  Config,
+  CustomCategory,
+  Goal,
+  IOU,
+  IOUEvent,
+  ProjectionSettings,
+  RecurringTransaction,
+  SalaryPeriod,
+  Transaction,
+} from "../types";
+import { useLocalStorage } from "./useLocalStorage";
+
+const TODAY = format(new Date(), "yyyy-MM-dd");
+
+const DEFAULT_RECURRING: RecurringTransaction[] = [
+  {
+    id: "rec-rent",
+    amount: 5000,
+    mainCategory: "Needs",
+    subCategory: "Rent",
+    description: "Monthly Rent",
+    frequency: "monthly",
+    startDate: TODAY,
+    isActive: true,
+    lastGenerated: null,
+  },
+  {
+    id: "rec-internet",
+    amount: 1299,
+    mainCategory: "Needs",
+    subCategory: "Bills/Subscriptions",
+    description: "Internet Bill",
+    frequency: "monthly",
+    startDate: TODAY,
+    isActive: true,
+    lastGenerated: null,
+  },
+];
+
+const DEFAULT_IOUS: IOU[] = [
+  {
+    id: "iou-kuya",
+    personName: "Kuya",
+    amountLent: 5000,
+    dateLent: "2026-04-01",
+    dueDate: "2026-05-01",
+    interestPct: undefined,
+    status: "current",
+    events: [
+      {
+        id: "iou-kuya-ev1",
+        date: "2026-04-01",
+        type: "lend",
+        amount: 5000,
+      },
+    ],
+  },
+  {
+    id: "iou-john",
+    personName: "John",
+    amountLent: 3000,
+    dateLent: "2026-03-20",
+    dueDate: "2026-04-20",
+    interestPct: undefined,
+    status: "overdue",
+    events: [
+      {
+        id: "iou-john-ev1",
+        date: "2026-03-20",
+        type: "lend",
+        amount: 3000,
+      },
+    ],
+  },
+];
+
+function migrateConfig(config: Config): Config {
+  let migrated = config;
+
+  // Step 1: migrate legacy needsPct/wantsPct/savingsPct to customCategories
+  if (!migrated.customCategories || migrated.customCategories.length === 0) {
+    const needsPct = migrated.needsPct ?? 50;
+    const wantsPct = migrated.wantsPct ?? 30;
+    const savingsPct = migrated.savingsPct ?? 20;
+    const newCats: CustomCategory[] = DEFAULT_CUSTOM_CATEGORIES.map((cat) => {
+      if (cat.name === "Needs") return { ...cat, pct: needsPct };
+      if (cat.name === "Wants") return { ...cat, pct: wantsPct };
+      if (cat.name === "Savings") return { ...cat, pct: savingsPct };
+      return cat;
+    });
+    migrated = { ...migrated, customCategories: newCats };
+  }
+
+  // Step 2: migrate subcategory pcts — only if ALL subs are missing pct
+  if (migrated.customCategories) {
+    const updatedCats = migrated.customCategories.map((cat) => {
+      if (cat.subCategories.length === 0) return cat;
+      const allMissing = cat.subCategories.every(
+        (sub) => !sub.pct || sub.pct === 0,
+      );
+      if (!allMissing) return cat; // preserve partially-set data
+
+      // Try to find matching default to pull pcts from
+      const defaultCat = DEFAULT_CUSTOM_CATEGORIES.find(
+        (d) => d.id === cat.id || d.name === cat.name,
+      );
+
+      if (
+        defaultCat &&
+        defaultCat.subCategories.length === cat.subCategories.length
+      ) {
+        // Map from default by position
+        const updatedSubs = cat.subCategories.map((sub, i) => ({
+          ...sub,
+          pct: defaultCat.subCategories[i]?.pct ?? 0,
+        }));
+        return { ...cat, subCategories: updatedSubs };
+      }
+
+      // Even distribution fallback
+      const count = cat.subCategories.length;
+      const base = Math.floor(100 / count);
+      const remainder = 100 - base * count;
+      const updatedSubs = cat.subCategories.map((sub, i) => ({
+        ...sub,
+        pct: base + (i === count - 1 ? remainder : 0),
+      }));
+      return { ...cat, subCategories: updatedSubs };
+    });
+    migrated = { ...migrated, customCategories: updatedCats };
+  }
+
+  return migrated;
+}
+
+function getNextDueDate(
+  startDate: string,
+  frequency: RecurringTransaction["frequency"],
+  after: Date,
+): Date {
+  let date = parseISO(startDate);
+  const afterTime = after.getTime();
+  while (date.getTime() <= afterTime) {
+    if (frequency === "weekly") date = addDays(date, 7);
+    else if (frequency === "biweekly") date = addDays(date, 14);
+    else date = addMonths(date, 1);
+  }
+  // Go back one step to get last due date on or before 'after'
+  if (frequency === "weekly") return addDays(date, -7);
+  if (frequency === "biweekly") return addDays(date, -14);
+  return addMonths(date, -1);
+}
+
+/** Compute outstanding balance for an IOU (amountLent minus all repayments) */
+function getIOUBalance(iou: IOU): number {
+  const repaid = iou.events
+    .filter((e) => e.type === "repay")
+    .reduce((sum, e) => sum + e.amount, 0);
+  return Math.max(0, iou.amountLent - repaid);
+}
+
+export function useFinanceData() {
+  const [rawConfig, setRawConfig] = useLocalStorage<Config | null>(
+    "sft_config",
+    null,
+  );
+  const [transactions, setTransactions] = useLocalStorage<Transaction[]>(
+    "sft_transactions",
+    [],
+  );
+  const [periods, setPeriods] = useLocalStorage<SalaryPeriod[]>(
+    "sft_periods",
+    [],
+  );
+  const [recurring, setRecurring] = useLocalStorage<RecurringTransaction[]>(
+    "sft_recurring",
+    DEFAULT_RECURRING,
+  );
+  const [accounts, setAccounts] = useLocalStorage<Account[]>(
+    "sft_accounts",
+    [],
+  );
+  const [goals, setGoals] = useLocalStorage<Goal[]>("sft_goals", []);
+  const [projectionSettings, setProjectionSettings] =
+    useLocalStorage<ProjectionSettings>("sft_projection_settings", {
+      monthlyIncome: 19000,
+      returnRatePct: 7,
+    });
+  const [ious, setIOUs] = useLocalStorage<IOU[]>("sft_ious", DEFAULT_IOUS);
+
+  // Migrate config on first load if needed
+  const config = rawConfig ? migrateConfig(rawConfig) : null;
+  const setConfig = setRawConfig;
+
+  // Sync projection settings default monthly income with config salary if not customized
+  const isOnboarded =
+    config !== null && config.name !== "" && config.salary > 0;
+
+  const customCategories =
+    config?.customCategories ?? DEFAULT_CUSTOM_CATEGORIES;
+
+  // Auto-generate recurring transactions on mount (once)
+  const hasAutoGenerated = useRef(false);
+  const configRef = useRef(config);
+  const recurringRef = useRef(recurring);
+  const isOnboardedRef = useRef(isOnboarded);
+  const setTransactionsRef = useRef(setTransactions);
+  const setRecurringRef = useRef(setRecurring);
+  const setIOUsRef = useRef(setIOUs);
+  configRef.current = config;
+  recurringRef.current = recurring;
+  isOnboardedRef.current = isOnboarded;
+  setTransactionsRef.current = setTransactions;
+  setRecurringRef.current = setRecurring;
+  setIOUsRef.current = setIOUs;
+
+  useEffect(() => {
+    if (hasAutoGenerated.current) return;
+    const cfg = configRef.current;
+    const rec = recurringRef.current;
+    const onboarded = isOnboardedRef.current;
+    if (!cfg || !onboarded) return;
+    hasAutoGenerated.current = true;
+
+    const today = new Date();
+    const todayStr = format(today, "yyyy-MM-dd");
+    const periodStart = parseISO(cfg.startDate);
+    let generated = 0;
+    const missed: string[] = [];
+
+    const updatedRecurring = rec.map((rule) => {
+      if (!rule.isActive) return rule;
+      // Rule hasn't started yet — skip entirely, not missed
+      if (rule.startDate > todayStr) return rule;
+      try {
+        const lastDue = getNextDueDate(rule.startDate, rule.frequency, today);
+        const lastDueStr = format(lastDue, "yyyy-MM-dd");
+
+        // Check if this rule is "missed" — due before current period start
+        if (lastDue < periodStart) {
+          // Rule was supposed to fire before the current period, may be missed
+          if (rule.lastGenerated === null || rule.lastGenerated < lastDueStr) {
+            missed.push(rule.description || rule.subCategory);
+          }
+          return rule;
+        }
+
+        if (rule.lastGenerated === lastDueStr) return rule;
+        const newTx: Transaction = {
+          id: crypto.randomUUID(),
+          amount: rule.amount,
+          date: lastDueStr,
+          mainCategory: rule.mainCategory,
+          subCategory: rule.subCategory,
+          description: rule.description,
+          type: "expense",
+        };
+        setTransactionsRef.current((prev) => [newTx, ...prev]);
+        generated++;
+        return { ...rule, lastGenerated: lastDueStr };
+      } catch {
+        return rule;
+      }
+    });
+
+    if (generated > 0) {
+      setRecurringRef.current(updatedRecurring);
+      toast.success(
+        `${generated} recurring transaction${generated > 1 ? "s" : ""} added for this period`,
+      );
+    }
+
+    if (missed.length > 0) {
+      setTimeout(() => {
+        toast.warning(
+          `${missed.length} recurring transaction${missed.length > 1 ? "s" : ""} may have been missed. Check Recurring tab.`,
+          { duration: 6000 },
+        );
+      }, 1500);
+    }
+  }, []); // run once on mount
+
+  // Auto-flag IOUs as overdue on mount
+  useEffect(() => {
+    const todayStr = format(new Date(), "yyyy-MM-dd");
+    setIOUsRef.current((prev) =>
+      prev.map((iou) => {
+        if (iou.status === "current" && iou.dueDate < todayStr) {
+          return { ...iou, status: "overdue" };
+        }
+        return iou;
+      }),
+    );
+  }, []); // run once on mount
+
+  const getPeriodEndDate = useCallback(
+    (startDate: string, periodType: string): string => {
+      const start = parseISO(startDate);
+      let end: Date;
+      switch (periodType) {
+        case "biweekly":
+          end = addWeeks(start, 2);
+          break;
+        case "weekly":
+          end = addWeeks(start, 1);
+          break;
+        default:
+          end = addMonths(start, 1);
+      }
+      return format(end, "yyyy-MM-dd");
+    },
+    [],
+  );
+
+  const currentPeriodEnd = config
+    ? getPeriodEndDate(config.startDate, config.period)
+    : format(new Date(), "yyyy-MM-dd");
+
+  const currentTransactions = transactions.filter((t) => {
+    if (!config) return false;
+    try {
+      const txDate = parseISO(t.date);
+      const start = parseISO(config.startDate);
+      const end = parseISO(currentPeriodEnd);
+      return isWithinInterval(txDate, { start, end });
+    } catch {
+      return true;
+    }
+  });
+
+  const getBudgetForCategory = useCallback(
+    (catName: string): number => {
+      if (!config) return 0;
+      const cat = customCategories.find(
+        (c) => c.name.toLowerCase() === catName.toLowerCase(),
+      );
+      if (!cat) return 0;
+      return (config.salary * cat.pct) / 100;
+    },
+    [config, customCategories],
+  );
+
+  const getBudgetForSubCategory = useCallback(
+    (catName: string, subName: string): number => {
+      const cat = customCategories.find(
+        (c) => c.name.toLowerCase() === catName.toLowerCase(),
+      );
+      if (!cat) return 0;
+      const sub = cat.subCategories.find((s) => s.name === subName);
+      if (!sub || !sub.pct) return 0;
+      const catBudget = getBudgetForCategory(catName);
+      return (catBudget * sub.pct) / 100;
+    },
+    [customCategories, getBudgetForCategory],
+  );
+
+  const getSpentForCategory = useCallback(
+    (catName: string, txList?: Transaction[]): number => {
+      const list = txList ?? currentTransactions;
+      return list
+        .filter(
+          (t) =>
+            t.mainCategory.toLowerCase() === catName.toLowerCase() &&
+            t.type === "expense",
+        )
+        .reduce((sum, t) => sum + t.amount, 0);
+    },
+    [currentTransactions],
+  );
+
+  const getSpentForSubCategory = useCallback(
+    (subCat: string, txList?: Transaction[]): number => {
+      const list = txList ?? currentTransactions;
+      return list
+        .filter((t) => t.subCategory === subCat && t.type === "expense")
+        .reduce((sum, t) => sum + t.amount, 0);
+    },
+    [currentTransactions],
+  );
+
+  const getMainCatForSub = useCallback(
+    (subName: string): string | null => {
+      for (const cat of customCategories) {
+        if (cat.subCategories.some((s) => s.name === subName)) {
+          return cat.name;
+        }
+      }
+      return null;
+    },
+    [customCategories],
+  );
+
+  const getSubColor = useCallback(
+    (mainCatName: string, subName: string): string => {
+      const cat = customCategories.find((c) => c.name === mainCatName);
+      if (!cat) return "#888";
+      const sub = cat.subCategories.find((s) => s.name === subName);
+      return sub?.color ?? cat.color;
+    },
+    [customCategories],
+  );
+
+  const totalExpenses = currentTransactions
+    .filter((t) => t.type === "expense" && t.mainCategory !== "Transfer")
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalIncome =
+    currentTransactions
+      .filter((t) => t.type === "income" && t.mainCategory !== "Transfer")
+      .reduce((sum, t) => sum + t.amount, 0) + (config?.salary ?? 0);
+
+  const remaining = totalIncome - totalExpenses;
+
+  const mainAccountBalance = config ? config.salary - totalExpenses : 0;
+
+  const periodProgress = (() => {
+    if (!config) return 0;
+    try {
+      const start = parseISO(config.startDate);
+      const end = parseISO(currentPeriodEnd);
+      const now = new Date();
+      const total = differenceInDays(end, start);
+      const elapsed = differenceInDays(now, start);
+      return Math.min(100, Math.max(0, (elapsed / total) * 100));
+    } catch {
+      return 0;
+    }
+  })();
+
+  const addTransaction = useCallback(
+    (tx: Omit<Transaction, "id">) => {
+      const newTx: Transaction = { ...tx, id: crypto.randomUUID() };
+      setTransactions((prev) => [newTx, ...prev]);
+      return newTx;
+    },
+    [setTransactions],
+  );
+
+  const updateTransaction = useCallback(
+    (id: string, updates: Partial<Transaction>) => {
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+      );
+    },
+    [setTransactions],
+  );
+
+  const deleteTransaction = useCallback(
+    (id: string) => {
+      setTransactions((prev) => prev.filter((t) => t.id !== id));
+    },
+    [setTransactions],
+  );
+
+  const startNewPeriod = useCallback(() => {
+    if (!config) return;
+    const newPeriod: SalaryPeriod = {
+      id: crypto.randomUUID(),
+      startDate: config.startDate,
+      endDate: currentPeriodEnd,
+      salary: config.salary,
+      transactions: [...currentTransactions],
+    };
+    setPeriods((prev) => [newPeriod, ...prev]);
+    const newStart = format(new Date(), "yyyy-MM-dd");
+    setConfig((prev) => (prev ? { ...prev, startDate: newStart } : prev));
+    setTransactions((prev) =>
+      prev.filter((t) => !currentTransactions.find((ct) => ct.id === t.id)),
+    );
+    // Reset recurring lastGenerated so they generate fresh next period
+    setRecurring((prev) => prev.map((r) => ({ ...r, lastGenerated: null })));
+    hasAutoGenerated.current = false;
+  }, [
+    config,
+    currentPeriodEnd,
+    currentTransactions,
+    setPeriods,
+    setConfig,
+    setTransactions,
+    setRecurring,
+  ]);
+
+  const resetAllData = useCallback(() => {
+    setConfig(null);
+    setTransactions([]);
+    setPeriods([]);
+    setRecurring(DEFAULT_RECURRING);
+    setAccounts([]);
+    setGoals([]);
+    setProjectionSettings({ monthlyIncome: 19000, returnRatePct: 7 });
+    setIOUs(DEFAULT_IOUS);
+    localStorage.removeItem("sft_config");
+    localStorage.removeItem("sft_transactions");
+    localStorage.removeItem("sft_periods");
+    localStorage.removeItem("sft_recurring");
+    localStorage.removeItem("sft_accounts");
+    localStorage.removeItem("sft_goals");
+    localStorage.removeItem("sft_projection_settings");
+    localStorage.removeItem("sft_ious");
+  }, [
+    setConfig,
+    setTransactions,
+    setPeriods,
+    setRecurring,
+    setAccounts,
+    setGoals,
+    setProjectionSettings,
+    setIOUs,
+  ]);
+
+  const exportData = useCallback(() => {
+    const data = {
+      config,
+      transactions,
+      periods,
+      recurring,
+      accounts,
+      goals,
+      projectionSettings,
+      ious,
+      exportDate: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `salary-flow-tracker-${format(new Date(), "yyyy-MM-dd")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [
+    config,
+    transactions,
+    periods,
+    recurring,
+    accounts,
+    goals,
+    projectionSettings,
+    ious,
+  ]);
+
+  const importData = useCallback(
+    (jsonString: string) => {
+      try {
+        const data = JSON.parse(jsonString);
+        if (data.config) setConfig(data.config);
+        if (data.transactions) setTransactions(data.transactions);
+        if (data.periods) setPeriods(data.periods);
+        if (data.recurring) setRecurring(data.recurring);
+        if (data.accounts) setAccounts(data.accounts);
+        if (data.goals) setGoals(data.goals);
+        if (data.projectionSettings)
+          setProjectionSettings(data.projectionSettings);
+        if (data.ious) setIOUs(data.ious);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [
+      setConfig,
+      setTransactions,
+      setPeriods,
+      setRecurring,
+      setAccounts,
+      setGoals,
+      setProjectionSettings,
+      setIOUs,
+    ],
+  );
+
+  // Export ALL transactions (across all periods), not just current
+  const exportCSV = useCallback(() => {
+    const headers = [
+      "Date",
+      "Type",
+      "Category",
+      "SubCategory",
+      "Description",
+      "Amount",
+      "Account",
+    ];
+    // Gather all transactions: current + all archived periods
+    const allTxs: Transaction[] = [...transactions];
+    for (const period of periods) {
+      for (const tx of period.transactions) {
+        if (!allTxs.find((t) => t.id === tx.id)) {
+          allTxs.push(tx);
+        }
+      }
+    }
+    // Sort descending by date
+    allTxs.sort((a, b) => b.date.localeCompare(a.date));
+
+    const rows = allTxs.map((t) => [
+      t.date,
+      t.type,
+      t.mainCategory,
+      t.subCategory,
+      t.description,
+      t.amount.toString(),
+      t.account ?? "",
+    ]);
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${c}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transactions-${format(new Date(), "yyyy-MM-dd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [transactions, periods]);
+
+  // Recurring CRUD
+  const addRecurring = useCallback(
+    (r: Omit<RecurringTransaction, "id">) => {
+      const newR: RecurringTransaction = { ...r, id: crypto.randomUUID() };
+      setRecurring((prev) => [newR, ...prev]);
+    },
+    [setRecurring],
+  );
+
+  const updateRecurring = useCallback(
+    (id: string, updates: Partial<RecurringTransaction>) => {
+      setRecurring((prev) =>
+        prev.map((r) => (r.id === id ? { ...r, ...updates } : r)),
+      );
+    },
+    [setRecurring],
+  );
+
+  const deleteRecurring = useCallback(
+    (id: string) => {
+      setRecurring((prev) => prev.filter((r) => r.id !== id));
+    },
+    [setRecurring],
+  );
+
+  // Account CRUD
+  const addAccount = useCallback(
+    (acc: Omit<Account, "id">) => {
+      const newAcc: Account = { ...acc, id: crypto.randomUUID() };
+      setAccounts((prev) => [...prev, newAcc]);
+    },
+    [setAccounts],
+  );
+
+  const updateAccount = useCallback(
+    (id: string, updates: Partial<Account>) => {
+      setAccounts((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, ...updates } : a)),
+      );
+    },
+    [setAccounts],
+  );
+
+  const deleteAccount = useCallback(
+    (id: string) => {
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+    },
+    [setAccounts],
+  );
+
+  const reorderAccounts = useCallback(
+    (newOrder: Account[]) => {
+      setAccounts(newOrder);
+    },
+    [setAccounts],
+  );
+
+  const transferBetweenAccounts = useCallback(
+    (fromId: string, toId: string, amount: number, note: string) => {
+      const today = format(new Date(), "yyyy-MM-dd");
+      const fromAcc = accounts.find((a) => a.id === fromId);
+      const toAcc = accounts.find((a) => a.id === toId);
+      if (!fromAcc || !toAcc) return;
+
+      // Update balances (skip for "main" accounts — they're auto-calculated)
+      if (!fromAcc.isMain) {
+        updateAccount(fromId, { balance: fromAcc.balance - amount });
+      }
+      if (!toAcc.isMain) {
+        updateAccount(toId, { balance: toAcc.balance + amount });
+      }
+
+      // Create 2 transfer transactions
+      const outTx: Transaction = {
+        id: crypto.randomUUID(),
+        amount,
+        date: today,
+        mainCategory: "Transfer",
+        subCategory: "",
+        description: `Transfer to ${toAcc.name}${note ? ` – ${note}` : ""}`,
+        type: "expense",
+      };
+      const inTx: Transaction = {
+        id: crypto.randomUUID(),
+        amount,
+        date: today,
+        mainCategory: "Transfer",
+        subCategory: "",
+        description: `Transfer from ${fromAcc.name}${note ? ` – ${note}` : ""}`,
+        type: "income",
+      };
+      setTransactions((prev) => [outTx, inTx, ...prev]);
+    },
+    [accounts, updateAccount, setTransactions],
+  );
+
+  // Goal CRUD
+  const addGoal = useCallback(
+    (g: Omit<Goal, "id">) => {
+      const newGoal: Goal = { ...g, id: crypto.randomUUID() };
+      setGoals((prev) => [...prev, newGoal]);
+    },
+    [setGoals],
+  );
+
+  const updateGoal = useCallback(
+    (id: string, updates: Partial<Goal>) => {
+      setGoals((prev) =>
+        prev.map((g) => (g.id === id ? { ...g, ...updates } : g)),
+      );
+    },
+    [setGoals],
+  );
+
+  const deleteGoal = useCallback(
+    (id: string) => {
+      setGoals((prev) => prev.filter((g) => g.id !== id));
+    },
+    [setGoals],
+  );
+
+  const updateProjectionSettings = useCallback(
+    (updates: Partial<ProjectionSettings>) => {
+      setProjectionSettings((prev) => ({ ...prev, ...updates }));
+    },
+    [setProjectionSettings],
+  );
+
+  // CC Alerts
+  const getCCAlerts = useCallback((): CCAlert[] => {
+    const alerts: CCAlert[] = [];
+    const today = new Date();
+    for (const acc of accounts) {
+      if (acc.type !== "credit") continue;
+      // Utilization alert
+      if (acc.creditLimit && acc.creditLimit > 0) {
+        const util = (acc.balance / acc.creditLimit) * 100;
+        if (util >= 70) {
+          alerts.push({
+            accountId: acc.id,
+            accountName: acc.name,
+            type: "utilization",
+            message: `${acc.name}: ${Math.round(util)}% utilized`,
+          });
+        }
+      }
+      // Due date alert
+      if (acc.dueDate) {
+        try {
+          const due = parseISO(acc.dueDate);
+          const daysUntilDue = differenceInDays(due, today);
+          if (daysUntilDue >= 0 && daysUntilDue <= 3) {
+            alerts.push({
+              accountId: acc.id,
+              accountName: acc.name,
+              type: "due_soon",
+              message: `${acc.name}: due in ${daysUntilDue} day${daysUntilDue !== 1 ? "s" : ""}`,
+            });
+          }
+        } catch {
+          // ignore invalid dates
+        }
+      }
+    }
+    return alerts;
+  }, [accounts]);
+
+  // Missed recurring detection
+  const missedRecurring = (() => {
+    if (!config) return [];
+    const today = new Date();
+    const todayStr = format(today, "yyyy-MM-dd");
+    const periodStart = parseISO(config.startDate);
+    return recurring.filter((rule) => {
+      if (!rule.isActive) return false;
+      // Rule hasn't started yet — not missed, just scheduled
+      if (rule.startDate > todayStr) return false;
+      try {
+        const lastDue = getNextDueDate(rule.startDate, rule.frequency, today);
+        // Rule was due before current period start and wasn't generated
+        if (lastDue < periodStart) {
+          return (
+            rule.lastGenerated === null ||
+            rule.lastGenerated < format(lastDue, "yyyy-MM-dd")
+          );
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    });
+  })();
+
+  const allSubCategories = customCategories.flatMap((cat) =>
+    cat.subCategories.map((sub) => ({
+      name: sub.name,
+      icon: sub.icon,
+      badgeColor: sub.color ?? cat.color,
+      mainCategory: cat.name,
+    })),
+  );
+
+  // IOU derived values
+  const totalIOUsOwed = ious
+    .filter((iou) => iou.status === "current" || iou.status === "overdue")
+    .reduce((sum, iou) => sum + getIOUBalance(iou), 0);
+
+  // IOU CRUD
+  const addIOU = useCallback(
+    (data: Omit<IOU, "id" | "events" | "status">, sourceAccountId?: string) => {
+      const id = crypto.randomUUID();
+      const lendEvent: IOUEvent = {
+        id: crypto.randomUUID(),
+        date: data.dateLent,
+        type: "lend",
+        amount: data.amountLent,
+        accountId: sourceAccountId,
+      };
+      const newIOU: IOU = {
+        ...data,
+        id,
+        status: "current",
+        events: [lendEvent],
+      };
+      setIOUs((prev) => [newIOU, ...prev]);
+
+      // Log lend as expense transaction from the source account
+      if (sourceAccountId) {
+        addTransaction({
+          amount: data.amountLent,
+          date: data.dateLent,
+          mainCategory: "IOU",
+          subCategory: data.personName,
+          description: `Lent ₱${data.amountLent.toLocaleString()} to ${data.personName}`,
+          type: "expense",
+          account: sourceAccountId,
+        });
+        // Deduct from the source account balance if not main
+        const srcAcc = accounts.find((a) => a.id === sourceAccountId);
+        if (srcAcc && !srcAcc.isMain) {
+          updateAccount(sourceAccountId, {
+            balance: srcAcc.balance - data.amountLent,
+          });
+        }
+      }
+    },
+    [setIOUs, addTransaction, accounts, updateAccount],
+  );
+
+  const repayIOU = useCallback(
+    (
+      iouId: string,
+      amount: number,
+      accountId: string,
+      date: string,
+      note?: string,
+    ) => {
+      setIOUsRef.current((prev) =>
+        prev.map((iou) => {
+          if (iou.id !== iouId) return iou;
+          const repayEvent: IOUEvent = {
+            id: crypto.randomUUID(),
+            date,
+            type: "repay",
+            amount,
+            accountId,
+            note,
+          };
+          const newEvents = [...iou.events, repayEvent];
+          const newBalance =
+            iou.amountLent -
+            newEvents
+              .filter((e) => e.type === "repay")
+              .reduce((s, e) => s + e.amount, 0);
+          const newStatus =
+            newBalance <= 0
+              ? "paid"
+              : iou.dueDate < format(new Date(), "yyyy-MM-dd")
+                ? "overdue"
+                : "current";
+          return { ...iou, events: newEvents, status: newStatus };
+        }),
+      );
+
+      // Log repayment as income to the chosen account
+      const iou = ious.find((i) => i.id === iouId);
+      addTransaction({
+        amount,
+        date,
+        mainCategory: "IOU",
+        subCategory: iou?.personName ?? "",
+        description: `${iou?.personName ?? ""} repaid ₱${amount.toLocaleString()}${note ? ` – ${note}` : ""}`,
+        type: "income",
+        account: accountId,
+      });
+
+      // Credit the account balance if not main
+      const repayAcc = accounts.find((a) => a.id === accountId);
+      if (repayAcc && !repayAcc.isMain) {
+        updateAccount(accountId, { balance: repayAcc.balance + amount });
+      }
+    },
+    [ious, addTransaction, accounts, updateAccount],
+  );
+
+  const forgivenIOU = useCallback((iouId: string) => {
+    setIOUsRef.current((prev) =>
+      prev.map((iou) => {
+        if (iou.id !== iouId) return iou;
+        const forgivenEvent: IOUEvent = {
+          id: crypto.randomUUID(),
+          date: format(new Date(), "yyyy-MM-dd"),
+          type: "forgiven",
+          amount: getIOUBalance(iou),
+        };
+        return {
+          ...iou,
+          status: "forgiven",
+          events: [...iou.events, forgivenEvent],
+        };
+      }),
+    );
+  }, []);
+
+  const markIOUPaid = useCallback((iouId: string) => {
+    setIOUsRef.current((prev) =>
+      prev.map((iou) => {
+        if (iou.id !== iouId) return iou;
+        const paidEvent: IOUEvent = {
+          id: crypto.randomUUID(),
+          date: format(new Date(), "yyyy-MM-dd"),
+          type: "paid",
+          amount: getIOUBalance(iou),
+        };
+        return {
+          ...iou,
+          status: "paid",
+          events: [...iou.events, paidEvent],
+        };
+      }),
+    );
+  }, []);
+
+  const deleteIOU = useCallback(
+    (iouId: string) => {
+      setIOUs((prev) => prev.filter((iou) => iou.id !== iouId));
+    },
+    [setIOUs],
+  );
+
+  return {
+    config,
+    setConfig,
+    transactions,
+    periods,
+    recurring,
+    customCategories,
+    isOnboarded,
+    currentTransactions,
+    currentPeriodEnd,
+    getBudgetForCategory,
+    getBudgetForSubCategory,
+    getSpentForCategory,
+    getSpentForSubCategory,
+    getMainCatForSub,
+    getSubColor,
+    totalIncome,
+    totalExpenses,
+    remaining,
+    periodProgress,
+    mainAccountBalance,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+    addRecurring,
+    updateRecurring,
+    deleteRecurring,
+    startNewPeriod,
+    resetAllData,
+    exportData,
+    importData,
+    exportCSV,
+    allSubCategories,
+    getPeriodEndDate,
+    accounts,
+    addAccount,
+    updateAccount,
+    deleteAccount,
+    reorderAccounts,
+    transferBetweenAccounts,
+    goals,
+    addGoal,
+    updateGoal,
+    deleteGoal,
+    projectionSettings,
+    updateProjectionSettings,
+    getCCAlerts,
+    missedRecurring,
+    // IOU
+    ious,
+    totalIOUsOwed,
+    addIOU,
+    repayIOU,
+    forgivenIOU,
+    markIOUPaid,
+    deleteIOU,
+  };
+}

@@ -1,0 +1,170 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@font-face {
+  font-family: "Figtree";
+  src: url("/assets/fonts/Figtree.woff2") format("woff2");
+  font-weight: 300 900;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    --radius: 0.875rem;
+    /* Light theme */
+    --background: 0.97 0.005 220;
+    --foreground: 0.15 0.02 230;
+    --card: 1 0 0;
+    --card-foreground: 0.15 0.02 230;
+    --popover: 1 0 0;
+    --popover-foreground: 0.15 0.02 230;
+    --primary: 0.72 0.18 162;
+    --primary-foreground: 1 0 0;
+    --secondary: 0.93 0.01 220;
+    --secondary-foreground: 0.15 0.02 230;
+    --muted: 0.93 0.01 220;
+    --muted-foreground: 0.5 0.02 230;
+    --accent: 0.93 0.01 220;
+    --accent-foreground: 0.15 0.02 230;
+    --destructive: 0.62 0.22 25;
+    --destructive-foreground: 1 0 0;
+    --border: 0.88 0.01 220;
+    --input: 0.88 0.01 220;
+    --ring: 0.72 0.18 162;
+    --success: 0.72 0.18 162;
+    --warning: 0.82 0.15 85;
+    --chart-1: 0.72 0.18 162;
+    --chart-2: 0.65 0.17 195;
+    --chart-3: 0.78 0.14 145;
+    --chart-4: 0.82 0.15 85;
+    --chart-5: 0.62 0.22 25;
+    --sidebar: 0.97 0.005 220;
+    --sidebar-foreground: 0.15 0.02 230;
+    --sidebar-primary: 0.72 0.18 162;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.93 0.01 220;
+    --sidebar-accent-foreground: 0.15 0.02 230;
+    --sidebar-border: 0.88 0.01 220;
+    --sidebar-ring: 0.72 0.18 162;
+  }
+
+  .dark {
+    /* Dark theme - deep navy fintech */
+    --background: 0.14 0.025 240;
+    --foreground: 0.96 0.005 220;
+    --card: 0.19 0.03 235;
+    --card-foreground: 0.96 0.005 220;
+    --popover: 0.22 0.03 235;
+    --popover-foreground: 0.96 0.005 220;
+    --primary: 0.79 0.18 162;
+    --primary-foreground: 0.1 0.02 240;
+    --secondary: 0.24 0.035 235;
+    --secondary-foreground: 0.96 0.005 220;
+    --muted: 0.24 0.035 235;
+    --muted-foreground: 0.63 0.015 230;
+    --accent: 0.29 0.04 235;
+    --accent-foreground: 0.96 0.005 220;
+    --destructive: 0.65 0.22 25;
+    --destructive-foreground: 0.96 0.005 220;
+    --border: 0.96 0 0 / 10%;
+    --input: 0.96 0 0 / 15%;
+    --ring: 0.79 0.18 162;
+    --success: 0.79 0.18 162;
+    --warning: 0.82 0.15 85;
+    --chart-1: 0.79 0.18 162;
+    --chart-2: 0.68 0.17 195;
+    --chart-3: 0.82 0.14 145;
+    --chart-4: 0.82 0.15 85;
+    --chart-5: 0.65 0.22 25;
+    --sidebar: 0.19 0.03 235;
+    --sidebar-foreground: 0.96 0.005 220;
+    --sidebar-primary: 0.79 0.18 162;
+    --sidebar-primary-foreground: 0.1 0.02 240;
+    --sidebar-accent: 0.24 0.035 235;
+    --sidebar-accent-foreground: 0.96 0.005 220;
+    --sidebar-border: 0.96 0 0 / 10%;
+    --sidebar-ring: 0.79 0.18 162;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Figtree", system-ui, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Custom utilities */
+@layer utilities {
+  .text-success {
+    color: oklch(var(--success));
+  }
+  .text-warning {
+    color: oklch(var(--warning));
+  }
+  .bg-success {
+    background-color: oklch(var(--success) / 0.15);
+  }
+  .bg-warning {
+    background-color: oklch(var(--warning) / 0.15);
+  }
+  .border-success {
+    border-color: oklch(var(--success));
+  }
+
+  /* Gradient background */
+  .gradient-bg {
+    background: linear-gradient(
+      160deg,
+      oklch(var(--background)) 0%,
+      oklch(var(--card)) 100%
+    );
+  }
+
+  /* Card hover effect */
+  .card-hover {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card-hover:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Slide in animation */
+  .slide-up {
+    animation: slideUp 0.3s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in {
+    animation: fadeIn 0.25s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}

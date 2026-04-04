@@ -1,0 +1,313 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
+import { AlertTriangle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { CategoryIcon } from "../components/CategoryIcon";
+import { suggestCategory } from "../data/categories";
+import { useFinanceData } from "../hooks/useFinanceData";
+import { useTranslation } from "../hooks/useTranslation";
+import type { TransactionType } from "../types";
+
+interface AddTransactionProps {
+  onDone: () => void;
+}
+
+export function AddTransaction({ onDone }: AddTransactionProps) {
+  const t = useTranslation();
+  const {
+    config,
+    customCategories,
+    addTransaction,
+    getBudgetForCategory,
+    getSpentForSubCategory,
+    getMainCatForSub,
+    accounts,
+    mainAccountBalance,
+  } = useFinanceData();
+
+  const [amount, setAmount] = useState("");
+  const [type, setType] = useState<TransactionType>("expense");
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [subCategory, setSubCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState("");
+  const [showSuggestion, setShowSuggestion] = useState<string | null>(null);
+
+  const mainCat = subCategory ? getMainCatForSub(subCategory) : null;
+
+  useEffect(() => {
+    if (description.length >= 2) {
+      const suggestion = suggestCategory(description);
+      if (suggestion && suggestion !== subCategory) {
+        setShowSuggestion(suggestion);
+      } else {
+        setShowSuggestion(null);
+      }
+    } else {
+      setShowSuggestion(null);
+    }
+  }, [description, subCategory]);
+
+  const handleSubmit = () => {
+    const num = Number.parseFloat(amount);
+    if (!num || num <= 0) {
+      toast.error(t("positiveAmount"));
+      return;
+    }
+    if (!subCategory) {
+      toast.error(`${t("category")} is required`);
+      return;
+    }
+
+    if (type === "expense" && mainCat) {
+      const budget = getBudgetForCategory(mainCat);
+      const spent = getSpentForSubCategory(subCategory);
+      if (spent + num > budget) {
+        toast.warning(t("overspendWarning"), {
+          duration: 4000,
+          icon: <AlertTriangle size={16} />,
+        });
+      }
+    }
+
+    addTransaction({
+      amount: num,
+      date,
+      mainCategory: mainCat ?? customCategories[0]?.name ?? "Needs",
+      subCategory,
+      description,
+      type,
+      account: selectedAccount || undefined,
+    });
+
+    toast.success("Transaction added!");
+    setAmount("");
+    setDescription("");
+    setSubCategory("");
+    setSelectedAccount("");
+    onDone();
+  };
+
+  // Build account options: Main + all user accounts
+  const accountOptions = [
+    {
+      id: "main",
+      name: `Main (${config?.currency ?? "PHP"} ${mainAccountBalance.toLocaleString("en-PH", { maximumFractionDigits: 0 })})`,
+    },
+    ...accounts.map((a) => ({ id: a.name, name: a.name })),
+  ];
+
+  return (
+    <div className="pb-24 px-4 pt-2 fade-in">
+      <h1 className="text-xl font-bold text-foreground mb-6">
+        {t("addTransaction")}
+      </h1>
+
+      <div
+        className="rounded-2xl border border-border p-5 mb-4"
+        style={{ backgroundColor: "oklch(var(--card))" }}
+      >
+        <div className="flex gap-2 mb-4">
+          {(["expense", "income"] as TransactionType[]).map((tp) => (
+            <button
+              type="button"
+              key={tp}
+              onClick={() => setType(tp)}
+              className="flex-1 py-2 rounded-xl font-semibold text-sm transition-all"
+              style={{
+                backgroundColor:
+                  type === tp
+                    ? tp === "expense"
+                      ? "#EB5757"
+                      : "oklch(var(--primary))"
+                    : "oklch(var(--secondary))",
+                color: type === tp ? "#fff" : "oklch(var(--muted-foreground))",
+              }}
+            >
+              {t(tp)}
+            </button>
+          ))}
+        </div>
+        <div className="text-center">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-3xl text-muted-foreground font-bold">
+              {config?.currency ?? "PHP"}
+            </span>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00"
+              className="text-4xl font-bold bg-transparent border-none outline-none text-foreground w-full text-center"
+              min="0"
+              step="0.01"
+              data-ocid="add_transaction.amount.input"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <Label htmlFor="date">{t("date")}</Label>
+          <Input
+            id="date"
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="mt-1"
+            data-ocid="add_transaction.date.input"
+          />
+        </div>
+
+        <div>
+          <Label>{t("category")}</Label>
+          {showSuggestion && (
+            <button
+              type="button"
+              className="mt-1 mb-2 p-2 rounded-lg text-xs flex items-center gap-2 cursor-pointer w-full text-left"
+              style={{
+                backgroundColor: "oklch(var(--primary) / 0.15)",
+                color: "oklch(var(--primary))",
+              }}
+              onClick={() => {
+                setSubCategory(showSuggestion);
+                setShowSuggestion(null);
+              }}
+            >
+              <span>
+                💡 Suggested: <strong>{showSuggestion}</strong> — tap to apply
+              </span>
+            </button>
+          )}
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            {customCategories.map((cat) => (
+              <div key={cat.id}>
+                <div className="text-[10px] font-bold uppercase text-muted-foreground mb-1 px-1">
+                  {cat.name}
+                </div>
+                {cat.subCategories.map((sub) => {
+                  const effectiveColor = sub.color ?? cat.color;
+                  return (
+                    <button
+                      type="button"
+                      key={sub.id}
+                      onClick={() => setSubCategory(sub.name)}
+                      className="w-full flex items-center gap-2 p-2 rounded-lg mb-1 text-left transition-all"
+                      style={{
+                        backgroundColor:
+                          subCategory === sub.name
+                            ? `${effectiveColor}22`
+                            : "oklch(var(--secondary))",
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor:
+                          subCategory === sub.name
+                            ? effectiveColor
+                            : "transparent",
+                      }}
+                    >
+                      <CategoryIcon
+                        iconName={sub.icon}
+                        badgeColor={effectiveColor}
+                        size={12}
+                      />
+                      <span className="text-xs text-foreground truncate">
+                        {sub.name}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <Label htmlFor="desc">{t("description")}</Label>
+          <Input
+            id="desc"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Jollibee lunch with team"
+            className="mt-1"
+            data-ocid="add_transaction.description.input"
+          />
+        </div>
+
+        {/* Optional Account selector */}
+        <div>
+          <Label>
+            Account{" "}
+            <span className="text-muted-foreground text-xs font-normal">
+              (optional)
+            </span>
+          </Label>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedAccount("")}
+              className="px-3 py-1.5 rounded-full text-xs font-medium transition-all border"
+              style={{
+                backgroundColor:
+                  selectedAccount === ""
+                    ? "oklch(var(--secondary))"
+                    : "transparent",
+                borderColor:
+                  selectedAccount === ""
+                    ? "oklch(var(--border))"
+                    : "oklch(var(--border))",
+                color: "oklch(var(--muted-foreground))",
+              }}
+              data-ocid="add_transaction.account_none.toggle"
+            >
+              None
+            </button>
+            {accountOptions.map((acc) => (
+              <button
+                type="button"
+                key={acc.id}
+                onClick={() =>
+                  setSelectedAccount(selectedAccount === acc.id ? "" : acc.id)
+                }
+                className="px-3 py-1.5 rounded-full text-xs font-medium transition-all border"
+                style={{
+                  backgroundColor:
+                    selectedAccount === acc.id
+                      ? "oklch(var(--primary) / 0.15)"
+                      : "transparent",
+                  borderColor:
+                    selectedAccount === acc.id
+                      ? "oklch(var(--primary))"
+                      : "oklch(var(--border))",
+                  color:
+                    selectedAccount === acc.id
+                      ? "oklch(var(--primary))"
+                      : "oklch(var(--foreground))",
+                }}
+                data-ocid="add_transaction.account.toggle"
+              >
+                {acc.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <Button
+          onClick={handleSubmit}
+          className="w-full py-3 text-base font-bold"
+          style={{
+            backgroundColor: "oklch(var(--primary))",
+            color: "oklch(var(--primary-foreground))",
+          }}
+          data-ocid="add_transaction.submit_button"
+        >
+          {t("add")} {t(type)}
+        </Button>
+      </div>
+    </div>
+  );
+}

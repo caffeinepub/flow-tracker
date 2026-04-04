@@ -19,6 +19,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
 import { useTranslation } from "../hooks/useTranslation";
@@ -382,22 +383,25 @@ export function Reports() {
           className="sticky top-0 z-20 px-4 pt-2 pb-2 border-b border-border"
           style={{ backgroundColor: "oklch(var(--background))" }}
         >
-          <TabsList className="w-full">
-            <TabsTrigger
-              value="reports"
-              className="flex-1"
-              data-ocid="reports.reports.tab"
-            >
-              {t("reports")}
-            </TabsTrigger>
-            <TabsTrigger
-              value="recurring"
-              className="flex-1"
-              data-ocid="reports.recurring.tab"
-            >
-              Recurring
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-2">
+            <TabsList className="flex-1">
+              <TabsTrigger
+                value="reports"
+                className="flex-1"
+                data-ocid="reports.reports.tab"
+              >
+                {t("reports")}
+              </TabsTrigger>
+              <TabsTrigger
+                value="recurring"
+                className="flex-1"
+                data-ocid="reports.recurring.tab"
+              >
+                Recurring
+              </TabsTrigger>
+            </TabsList>
+            <HelpSheet section="reports" language={config?.language ?? "en"} />
+          </div>
         </div>
 
         <TabsContent value="reports" className="px-4 pt-4 mt-0">

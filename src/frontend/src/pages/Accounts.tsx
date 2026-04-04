@@ -12,6 +12,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -21,28 +27,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { differenceInDays, format, parseISO } from "date-fns";
 import {
   AlertTriangle,
   ArrowLeftRight,
   Building2,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
+  Circle,
   Clock,
   CreditCard,
   GripVertical,
   HandCoins,
+  MoreVertical,
   Pencil,
   Plus,
+  Receipt,
   Smartphone,
   Trash2,
   Wallet,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
-import type { Account, AccountType, IOU } from "../types";
+import type { Account, AccountType, Bill, IOU } from "../types";
 
 const ACCOUNT_PRESETS: { name: string; type: AccountType; color: string }[] = [
   { name: "Cash", type: "cash", color: "#F2C94C" },
@@ -158,6 +170,12 @@ function IOUStatusBadge({ status }: { status: IOU["status"] }) {
   );
 }
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 export function Accounts() {
   const {
     config,
@@ -180,6 +198,11 @@ export function Accounts() {
     forgivenIOU,
     markIOUPaid,
     deleteIOU,
+    bills,
+    addBill,
+    updateBill,
+    deleteBill,
+    toggleBillPaid,
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
 
@@ -222,6 +245,68 @@ export function Accounts() {
   };
 
   const isAccCollapsed = (key: string) => !!accountsCollapsed[key];
+
+  // Bill Tracker state
+  const [showAddBill, setShowAddBill] = useState(false);
+  const [editBill, setEditBill] = useState<Bill | null>(null);
+  const [billForm, setBillForm] = useState({
+    name: "",
+    amount: "",
+    dueDayOfMonth: "",
+    notes: "",
+  });
+
+  const resetBillForm = () =>
+    setBillForm({ name: "", amount: "", dueDayOfMonth: "", notes: "" });
+
+  const handleSaveBill = () => {
+    const name = billForm.name.trim();
+    const amount = Number.parseFloat(billForm.amount);
+    const dueDayOfMonth = Number.parseInt(billForm.dueDayOfMonth, 10);
+    if (!name) {
+      toast.error("Bill name is required");
+      return;
+    }
+    if (Number.isNaN(amount) || amount <= 0) {
+      toast.error("Valid amount required");
+      return;
+    }
+    if (
+      Number.isNaN(dueDayOfMonth) ||
+      dueDayOfMonth < 1 ||
+      dueDayOfMonth > 31
+    ) {
+      toast.error("Due day must be between 1 and 31");
+      return;
+    }
+    if (editBill) {
+      updateBill(editBill.id, {
+        name,
+        amount,
+        dueDayOfMonth,
+        notes: billForm.notes.trim() || undefined,
+      });
+      toast.success("Bill updated");
+      setEditBill(null);
+    } else {
+      addBill({
+        name,
+        amount,
+        dueDayOfMonth,
+        notes: billForm.notes.trim() || undefined,
+      });
+      toast.success("Bill added");
+      setShowAddBill(false);
+    }
+    resetBillForm();
+  };
+
+  // Bills due soon (within 3 days of today by day of month)
+  const todayDay = new Date().getDate();
+  const billsDueSoon = bills.filter((b) => {
+    const diff = b.dueDayOfMonth - todayDay;
+    return diff >= 0 && diff <= 3;
+  });
 
   // IOU state
   // "lent" or "borrowed" tab
@@ -722,9 +807,12 @@ export function Accounts() {
           onClick={() => toggleAccountsSection("accountList")}
           data-ocid="accounts.list.toggle"
         >
-          <span className="text-sm font-semibold text-muted-foreground">
-            My Accounts
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-muted-foreground">
+              My Accounts
+            </span>
+            <HelpSheet section="accounts" language={config?.language ?? "en"} />
+          </div>
           {isAccCollapsed("accountList") ? (
             <ChevronDown size={14} className="text-muted-foreground" />
           ) : (
@@ -1085,6 +1173,327 @@ export function Accounts() {
           </CollapsibleContent>
         </div>
       </Collapsible>
+
+      {/* Bill Tracker Section */}
+      <Collapsible
+        open={!isAccCollapsed("bills")}
+        onOpenChange={(open) => {
+          setAccountsCollapsed((prev) => {
+            const next = { ...prev, bills: !open };
+            try {
+              localStorage.setItem(ACCOUNTS_COLLAPSE_KEY, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }}
+      >
+        <div
+          className="rounded-2xl border border-border mb-4 overflow-hidden"
+          style={{ backgroundColor: "oklch(var(--card))" }}
+          data-ocid="accounts.bills.panel"
+        >
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center justify-between p-4 text-left"
+              data-ocid="accounts.bills.toggle"
+            >
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: "#F2C94C22" }}
+                >
+                  <Receipt size={15} style={{ color: "#F2C94C" }} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Bill Tracker
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {bills.filter((b) => b.isPaidThisPeriod).length}/
+                    {bills.length} paid this period
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <HelpSheet
+                  section="billTracker"
+                  language={config?.language ?? "en"}
+                />
+                <button
+                  type="button"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center"
+                  style={{
+                    backgroundColor: "oklch(var(--primary) / 0.15)",
+                    color: "oklch(var(--primary))",
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    resetBillForm();
+                    setEditBill(null);
+                    setShowAddBill(true);
+                  }}
+                  data-ocid="accounts.bills.add_button"
+                  aria-label="Add Bill"
+                >
+                  <Plus size={13} />
+                </button>
+                {!isAccCollapsed("bills") ? (
+                  <ChevronUp size={16} className="text-muted-foreground" />
+                ) : (
+                  <ChevronDown size={16} className="text-muted-foreground" />
+                )}
+              </div>
+            </button>
+          </CollapsibleTrigger>
+
+          <CollapsibleContent>
+            <div className="px-4 pb-4">
+              {/* Due Soon Banner */}
+              {billsDueSoon.length > 0 && (
+                <div
+                  className="rounded-xl p-3 mb-3 flex items-start gap-2"
+                  style={{
+                    backgroundColor: "#F2C94C18",
+                    borderLeft: "3px solid #F2C94C",
+                  }}
+                  data-ocid="accounts.bills.due_soon.card"
+                >
+                  <AlertTriangle
+                    size={14}
+                    style={{ color: "#F2C94C" }}
+                    className="flex-shrink-0 mt-0.5"
+                  />
+                  <div>
+                    <p
+                      className="text-xs font-semibold"
+                      style={{ color: "#F2C94C" }}
+                    >
+                      Due Soon
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {billsDueSoon
+                        .map((b) => `${b.name} (${ordinal(b.dueDayOfMonth)})`)
+                        .join(", ")}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Bills list */}
+              {bills.length === 0 ? (
+                <div
+                  className="text-center py-6"
+                  data-ocid="accounts.bills.empty_state"
+                >
+                  <Receipt
+                    size={28}
+                    className="mx-auto mb-2 text-muted-foreground opacity-40"
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    No bills added yet.
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Tap + Add Bill to get started.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {bills.map((bill, idx) => (
+                    <div
+                      key={bill.id}
+                      className="flex items-center gap-3 p-3 rounded-xl border border-border"
+                      style={{
+                        backgroundColor: "oklch(var(--secondary) / 0.4)",
+                      }}
+                      data-ocid={`accounts.bills.item.${idx + 1}`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => toggleBillPaid(bill.id)}
+                        className="flex-shrink-0"
+                        data-ocid={`accounts.bills.toggle_paid.${idx + 1}`}
+                        aria-label={
+                          bill.isPaidThisPeriod ? "Mark unpaid" : "Mark paid"
+                        }
+                      >
+                        {bill.isPaidThisPeriod ? (
+                          <CheckCircle2
+                            size={20}
+                            style={{ color: "#20D18A" }}
+                          />
+                        ) : (
+                          <Circle size={20} className="text-muted-foreground" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p
+                          className={`text-sm font-medium ${bill.isPaidThisPeriod ? "line-through text-muted-foreground" : "text-foreground"}`}
+                        >
+                          {bill.name}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatAmount(bill.amount, currency)} · Due:{" "}
+                          {ordinal(bill.dueDayOfMonth)}
+                        </p>
+                        {bill.notes && (
+                          <p className="text-[10px] text-muted-foreground italic mt-0.5">
+                            {bill.notes}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                        style={
+                          bill.isPaidThisPeriod
+                            ? { backgroundColor: "#20D18A22", color: "#20D18A" }
+                            : {
+                                backgroundColor: "oklch(var(--muted))",
+                                color: "oklch(var(--muted-foreground))",
+                              }
+                        }
+                      >
+                        {bill.isPaidThisPeriod ? "Paid" : "Unpaid"}
+                      </span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="p-1 rounded-lg text-muted-foreground"
+                            data-ocid={`accounts.bills.menu.${idx + 1}`}
+                            aria-label="Bill options"
+                          >
+                            <MoreVertical size={14} />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditBill(bill);
+                              setBillForm({
+                                name: bill.name,
+                                amount: String(bill.amount),
+                                dueDayOfMonth: String(bill.dueDayOfMonth),
+                                notes: bill.notes ?? "",
+                              });
+                              setShowAddBill(true);
+                            }}
+                            data-ocid={`accounts.bills.edit_button.${idx + 1}`}
+                          >
+                            <Pencil size={13} className="mr-2" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => {
+                              deleteBill(bill.id);
+                              toast.success("Bill deleted");
+                            }}
+                            data-ocid={`accounts.bills.delete_button.${idx + 1}`}
+                          >
+                            <Trash2 size={13} className="mr-2" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CollapsibleContent>
+        </div>
+      </Collapsible>
+
+      {/* Add/Edit Bill Dialog */}
+      <Dialog
+        open={showAddBill}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowAddBill(false);
+            setEditBill(null);
+            resetBillForm();
+          }
+        }}
+      >
+        <DialogContent data-ocid="accounts.bills.dialog">
+          <DialogHeader>
+            <DialogTitle>{editBill ? "Edit Bill" : "Add Bill"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs">Bill Name</Label>
+              <Input
+                value={billForm.name}
+                onChange={(e) =>
+                  setBillForm((f) => ({ ...f, name: e.target.value }))
+                }
+                placeholder="e.g. Electricity"
+                className="mt-1"
+                data-ocid="accounts.bills.name.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Amount (₱)</Label>
+              <Input
+                type="number"
+                value={billForm.amount}
+                onChange={(e) =>
+                  setBillForm((f) => ({ ...f, amount: e.target.value }))
+                }
+                placeholder="0.00"
+                className="mt-1"
+                data-ocid="accounts.bills.amount.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Due Day of Month (1–31)</Label>
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                value={billForm.dueDayOfMonth}
+                onChange={(e) =>
+                  setBillForm((f) => ({ ...f, dueDayOfMonth: e.target.value }))
+                }
+                placeholder="e.g. 15"
+                className="mt-1"
+                data-ocid="accounts.bills.due_day.input"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Notes (optional)</Label>
+              <Textarea
+                value={billForm.notes}
+                onChange={(e) =>
+                  setBillForm((f) => ({ ...f, notes: e.target.value }))
+                }
+                placeholder="Any notes..."
+                className="mt-1"
+                rows={2}
+                data-ocid="accounts.bills.notes.textarea"
+              />
+            </div>
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddBill(false);
+                setEditBill(null);
+                resetBillForm();
+              }}
+              data-ocid="accounts.bills.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveBill}
+              data-ocid="accounts.bills.save_button"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Transfer History */}
       {transferHistory.length > 0 && (

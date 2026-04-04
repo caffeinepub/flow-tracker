@@ -41,6 +41,7 @@ import {
   YAxis,
 } from "recharts";
 import { toast } from "sonner";
+import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
 import type { Goal } from "../types";
@@ -434,9 +435,15 @@ export function Projections() {
           onClick={() => toggleProjSection("settings")}
           data-ocid="projections.settings.toggle"
         >
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            Projection Settings
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Projection Settings
+            </h2>
+            <HelpSheet
+              section="projections"
+              language={config?.language ?? "en"}
+            />
+          </div>
           {isProjCollapsed("settings") ? (
             <ChevronDown size={14} className="text-muted-foreground" />
           ) : (

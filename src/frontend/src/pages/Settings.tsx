@@ -1,3 +1,13 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   ChevronDown,
   ChevronUp,
+  Database,
   Download,
   Moon,
   Plus,
@@ -24,6 +35,7 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { HelpSheet } from "../components/HelpSheet";
 import {
   CURRENCIES,
   DEFAULT_CUSTOM_CATEGORIES,
@@ -87,6 +99,11 @@ export function Settings() {
   const [mergeTargetId, setMergeTargetId] = useState<string>("");
   const [expandedCatId, setExpandedCatId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupFileRef = useRef<HTMLInputElement>(null);
+  const [showBackupWarning, setShowBackupWarning] = useState(false);
+  const [pendingRestoreFile, setPendingRestoreFile] = useState<string | null>(
+    null,
+  );
 
   // Income source chips state
   const [newChip, setNewChip] = useState("");
@@ -358,6 +375,85 @@ export function Settings() {
     reader.readAsText(file);
   };
 
+  const handleExportBackup = () => {
+    const ALL_KEYS = [
+      "sft_config",
+      "sft_transactions",
+      "sft_accounts",
+      "sft_goals",
+      "sft_ious",
+      "sft_recurring",
+      "sft_periods",
+      "sft_projection_settings",
+      "sft_bills",
+      "sft_lang",
+      "flow_accounts_sections",
+      "flow_dashboard_sections",
+      "flow_proj_sections",
+    ];
+    const data: Record<string, unknown> = {};
+    for (const key of ALL_KEYS) {
+      const val = localStorage.getItem(key);
+      if (val !== null) {
+        try {
+          data[key] = JSON.parse(val);
+        } catch {
+          data[key] = val;
+        }
+      }
+    }
+    const backup = {
+      version: "flow-tracker-v1",
+      exportedAt: new Date().toISOString(),
+      data,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10);
+    a.download = `flow-tracker-backup-${dateStr}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Backup exported successfully");
+  };
+
+  const handleRestoreFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result as string;
+      setPendingRestoreFile(result);
+      setShowBackupWarning(true);
+    };
+    reader.readAsText(file);
+    // Reset input so same file can be selected again
+    e.target.value = "";
+  };
+
+  const handleConfirmRestore = () => {
+    if (!pendingRestoreFile) return;
+    try {
+      const backup = JSON.parse(pendingRestoreFile);
+      if (backup.version !== "flow-tracker-v1") {
+        toast.error("Invalid backup file");
+        return;
+      }
+      for (const [key, value] of Object.entries(backup.data)) {
+        localStorage.setItem(key, JSON.stringify(value));
+      }
+      toast.success("Data restored successfully. Reloading...");
+      setTimeout(() => window.location.reload(), 1500);
+    } catch {
+      toast.error("Invalid backup file");
+    }
+    setShowBackupWarning(false);
+    setPendingRestoreFile(null);
+  };
+
   const handleResetCategories = () => {
     setLocalCats(DEFAULT_CUSTOM_CATEGORIES);
     toast.success("Categories reset to defaults");
@@ -383,6 +479,10 @@ export function Settings() {
 
   return (
     <div className="pb-24 px-4 pt-2 fade-in">
+      <div className="flex items-center justify-between mb-2">
+        <h1 className="text-xl font-bold text-foreground">Settings</h1>
+        <HelpSheet section="settings" language={config?.language ?? "en"} />
+      </div>
       {/* Profile */}
       <Section title={t("profile")}>
         <div className="space-y-3">
@@ -1153,6 +1253,41 @@ export function Settings() {
         </Button>
       </Section>
 
+      {/* Data Backup Section */}
+      <Section title="Data Backup">
+        <p className="text-xs text-muted-foreground mb-3">
+          Export all your data as a backup file, or restore from a previous
+          backup.
+        </p>
+        <div className="space-y-2">
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleExportBackup}
+            data-ocid="settings.backup.export_button"
+          >
+            <Database size={14} />
+            Export Backup
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full gap-2"
+            onClick={() => backupFileRef.current?.click()}
+            data-ocid="settings.backup.import_button"
+          >
+            <Upload size={14} />
+            Import Backup
+          </Button>
+          <input
+            ref={backupFileRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={handleRestoreFileSelect}
+          />
+        </div>
+      </Section>
+
       {/* Data Management */}
       <Section title="Data Management">
         <div className="space-y-2">
@@ -1295,6 +1430,35 @@ export function Settings() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Backup Restore Warning */}
+      <AlertDialog open={showBackupWarning} onOpenChange={setShowBackupWarning}>
+        <AlertDialogContent data-ocid="settings.backup.warning.dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore Backup</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will overwrite all your current data. Are you sure?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                setShowBackupWarning(false);
+                setPendingRestoreFile(null);
+              }}
+              data-ocid="settings.backup.warning.cancel_button"
+            >
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmRestore}
+              data-ocid="settings.backup.warning.confirm_button"
+            >
+              Yes, Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Reset Dialog */}
       <Dialog open={confirmReset} onOpenChange={setConfirmReset}>

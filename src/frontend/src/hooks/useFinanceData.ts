@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { DEFAULT_CUSTOM_CATEGORIES } from "../data/categories";
 import type {
   Account,
+  Bill,
   CCAlert,
   Config,
   CustomCategory,
@@ -152,6 +153,7 @@ export function useFinanceData() {
       returnRatePct: 7,
     });
   const [ious, setIOUs] = useLocalStorage<IOU[]>("sft_ious", DEFAULT_IOUS);
+  const [bills, setBills] = useLocalStorage<Bill[]>("sft_bills", []);
 
   // Migrate config on first load if needed
   const config = rawConfig ? migrateConfig(rawConfig) : null;
@@ -526,6 +528,8 @@ export function useFinanceData() {
     setGoals([]);
     setProjectionSettings({ monthlyIncome: 19000, returnRatePct: 7 });
     setIOUs([]);
+    setBills([]);
+    localStorage.removeItem("sft_bills");
     localStorage.removeItem("sft_config");
     localStorage.removeItem("sft_transactions");
     localStorage.removeItem("sft_periods");
@@ -543,6 +547,7 @@ export function useFinanceData() {
     setGoals,
     setProjectionSettings,
     setIOUs,
+    setBills,
   ]);
 
   const exportData = useCallback(() => {
@@ -555,6 +560,7 @@ export function useFinanceData() {
       goals,
       projectionSettings,
       ious,
+      bills,
       exportDate: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], {
@@ -575,6 +581,7 @@ export function useFinanceData() {
     goals,
     projectionSettings,
     ious,
+    bills,
   ]);
 
   const importData = useCallback(
@@ -590,6 +597,7 @@ export function useFinanceData() {
         if (data.projectionSettings)
           setProjectionSettings(data.projectionSettings);
         if (data.ious) setIOUs(data.ious);
+        if (data.bills) setBills(data.bills);
         return true;
       } catch {
         return false;
@@ -604,6 +612,7 @@ export function useFinanceData() {
       setGoals,
       setProjectionSettings,
       setIOUs,
+      setBills,
     ],
   );
 
@@ -1273,6 +1282,46 @@ export function useFinanceData() {
     [setIOUs],
   );
 
+  // Bill callbacks
+  const addBill = useCallback(
+    (bill: Omit<Bill, "id" | "isPaidThisPeriod">) => {
+      const newBill: Bill = {
+        ...bill,
+        id: crypto.randomUUID(),
+        isPaidThisPeriod: false,
+      };
+      setBills((prev) => [...prev, newBill]);
+    },
+    [setBills],
+  );
+
+  const updateBill = useCallback(
+    (id: string, updates: Partial<Bill>) => {
+      setBills((prev) =>
+        prev.map((b) => (b.id === id ? { ...b, ...updates } : b)),
+      );
+    },
+    [setBills],
+  );
+
+  const deleteBill = useCallback(
+    (id: string) => {
+      setBills((prev) => prev.filter((b) => b.id !== id));
+    },
+    [setBills],
+  );
+
+  const toggleBillPaid = useCallback(
+    (id: string) => {
+      setBills((prev) =>
+        prev.map((b) =>
+          b.id === id ? { ...b, isPaidThisPeriod: !b.isPaidThisPeriod } : b,
+        ),
+      );
+    },
+    [setBills],
+  );
+
   return {
     config,
     setConfig,
@@ -1339,5 +1388,11 @@ export function useFinanceData() {
     // Income source chips
     incomeSourceChips,
     updateIncomeSourceChips,
+    // Bills
+    bills,
+    addBill,
+    updateBill,
+    deleteBill,
+    toggleBillPaid,
   };
 }

@@ -1,4 +1,28 @@
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { addMonths, format, parseISO } from "date-fns";
 import {
   AlertTriangle,
@@ -6,12 +30,15 @@ import {
   ChevronRight,
   ChevronUp,
   HandCoins,
+  PiggyBank,
   Target,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { toast } from "sonner";
 import type { Tab } from "../components/BottomNav";
 import { CategoryIcon } from "../components/CategoryIcon";
+import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
 import { useTranslation } from "../hooks/useTranslation";
@@ -49,12 +76,17 @@ export function Dashboard({ onNavigate }: DashboardProps) {
     totalIOUsOwed,
     goals,
     projectionSettings,
+    addTransaction,
   } = useFinanceData();
 
   const currency = config?.currency ?? "PHP";
   const ccAlerts = getCCAlerts();
   const [showAllGoals, setShowAllGoals] = useState(false);
   const [dismissedExpiry, setDismissedExpiry] = useState(false);
+  const [showExcessPrompt, setShowExcessPrompt] = useState(true);
+  const [showExcessSheet, setShowExcessSheet] = useState(false);
+  const [selectedSavingsGoal, setSelectedSavingsGoal] =
+    useState<string>("__general__");
 
   // Collapsible sections — persisted in localStorage
   const [collapsed, setCollapsed] =
@@ -76,6 +108,61 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   const isPeriodExpired = config
     ? format(new Date(), "yyyy-MM-dd") > currentPeriodEnd
     : false;
+
+  // Excess to savings
+  const excessPromptKey = config
+    ? `flow_excess_prompted_${config.startDate}`
+    : null;
+  const hasBeenPrompted = excessPromptKey
+    ? !!localStorage.getItem(excessPromptKey)
+    : true;
+  const showExcessCard =
+    isPeriodExpired && remaining > 0 && !hasBeenPrompted && showExcessPrompt;
+
+  // Savings goals for excess prompt
+  const savingsGoals = useMemo(() => {
+    return goals.filter((g) => {
+      if (!g.subCategoryId) return false;
+      // find parent category
+      for (const cat of customCategories) {
+        if (cat.name.toLowerCase().includes("sav")) {
+          if (cat.subCategories.some((s) => s.id === g.subCategoryId))
+            return true;
+        }
+      }
+      return false;
+    });
+  }, [goals, customCategories]);
+
+  const handleMoveToSavings = () => {
+    if (!config) return;
+    const savingsCat = customCategories.find((c) =>
+      c.name.toLowerCase().includes("sav"),
+    );
+    const catName = savingsCat?.name ?? "Savings";
+    let subCatName = "General";
+    if (selectedSavingsGoal !== "__general__") {
+      const goal = savingsGoals.find((g) => g.id === selectedSavingsGoal);
+      if (goal) subCatName = goal.subCategoryName;
+    }
+    addTransaction({
+      amount: remaining,
+      date: format(new Date(), "yyyy-MM-dd"),
+      mainCategory: catName,
+      subCategory: subCatName,
+      description: "Excess to Savings",
+      type: "expense",
+    });
+    if (excessPromptKey) localStorage.setItem(excessPromptKey, "1");
+    setShowExcessPrompt(false);
+    setShowExcessSheet(false);
+    toast.success(`₱${remaining.toLocaleString()} moved to savings!`);
+  };
+
+  const handleSkipExcess = () => {
+    if (excessPromptKey) localStorage.setItem(excessPromptKey, "1");
+    setShowExcessPrompt(false);
+  };
 
   const pieData = useMemo(() => {
     return customCategories.map((cat) => ({
@@ -136,8 +223,9 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
   return (
     <div className="pb-24 fade-in">
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{periodLabel}</p>
+        <HelpSheet section="dashboard" language={config?.language ?? "en"} />
       </div>
 
       {/* Period Expired Banner */}
@@ -178,6 +266,110 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </div>
         </div>
       )}
+
+      {/* Excess to Savings Prompt */}
+      {showExcessCard && (
+        <div className="px-4 mb-3">
+          <div
+            className="w-full p-3 rounded-xl border"
+            style={{
+              backgroundColor: "oklch(0.6 0.18 150 / 0.08)",
+              borderColor: "oklch(0.6 0.18 150 / 0.35)",
+            }}
+            data-ocid="dashboard.excess_savings.card"
+          >
+            <div className="flex items-start gap-2 mb-3">
+              <PiggyBank
+                size={16}
+                style={{ color: "#20D18A" }}
+                className="flex-shrink-0 mt-0.5"
+              />
+              <p
+                className="text-xs font-medium flex-1"
+                style={{ color: "#20D18A" }}
+              >
+                You have {formatAmount(remaining, currency)} unspent this
+                period.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="flex-1 text-xs py-2 px-3 rounded-lg font-semibold"
+                style={{ backgroundColor: "#20D18A22", color: "#20D18A" }}
+                onClick={() => setShowExcessSheet(true)}
+                data-ocid="dashboard.excess_savings.move_button"
+              >
+                Move to Savings
+              </button>
+              <button
+                type="button"
+                className="text-xs py-2 px-3 rounded-lg font-medium text-muted-foreground"
+                style={{ backgroundColor: "oklch(var(--secondary))" }}
+                onClick={handleSkipExcess}
+                data-ocid="dashboard.excess_savings.skip_button"
+              >
+                Skip
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excess to Savings Sheet */}
+      <Sheet open={showExcessSheet} onOpenChange={setShowExcessSheet}>
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl"
+          data-ocid="dashboard.excess_savings.sheet"
+        >
+          <SheetHeader className="mb-4">
+            <SheetTitle>Move to Savings</SheetTitle>
+          </SheetHeader>
+          <p className="text-sm text-muted-foreground mb-4">
+            Move {formatAmount(remaining, currency)} unspent budget to savings.
+          </p>
+          {savingsGoals.length > 0 && (
+            <div className="mb-4">
+              <p className="text-xs text-muted-foreground mb-2">
+                Choose destination
+              </p>
+              <Select
+                value={selectedSavingsGoal}
+                onValueChange={setSelectedSavingsGoal}
+              >
+                <SelectTrigger data-ocid="dashboard.excess_savings.select">
+                  <SelectValue placeholder="Select destination" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__general__">General Savings</SelectItem>
+                  {savingsGoals.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>
+                      {g.label || g.subCategoryName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              onClick={handleMoveToSavings}
+              data-ocid="dashboard.excess_savings.confirm_button"
+            >
+              Confirm Move
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowExcessSheet(false)}
+              data-ocid="dashboard.excess_savings.cancel_button"
+            >
+              Cancel
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* CC Alerts Banner */}
       {ccAlerts.length > 0 && (

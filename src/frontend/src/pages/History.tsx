@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import type { Tab } from "../components/BottomNav";
 import { CategoryIcon } from "../components/CategoryIcon";
+import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
 import { useTranslation } from "../hooks/useTranslation";
@@ -222,22 +223,25 @@ export function History({ onNavigate: _onNavigate }: HistoryProps) {
     <div className="pb-24 fade-in">
       <Tabs defaultValue="transactions" className="w-full">
         <div className="px-4 pt-2">
-          <TabsList className="w-full mb-4">
-            <TabsTrigger
-              value="transactions"
-              className="flex-1"
-              data-ocid="history.transactions.tab"
-            >
-              Transactions
-            </TabsTrigger>
-            <TabsTrigger
-              value="reports"
-              className="flex-1"
-              data-ocid="history.reports.tab"
-            >
-              Reports
-            </TabsTrigger>
-          </TabsList>
+          <div className="flex items-center gap-2 mb-4">
+            <TabsList className="flex-1">
+              <TabsTrigger
+                value="transactions"
+                className="flex-1"
+                data-ocid="history.transactions.tab"
+              >
+                Transactions
+              </TabsTrigger>
+              <TabsTrigger
+                value="reports"
+                className="flex-1"
+                data-ocid="history.reports.tab"
+              >
+                Reports
+              </TabsTrigger>
+            </TabsList>
+            <HelpSheet section="history" language={config?.language ?? "en"} />
+          </div>
         </div>
 
         <TabsContent value="transactions" className="mt-0">
@@ -592,8 +596,6 @@ export function History({ onNavigate: _onNavigate }: HistoryProps) {
           </div>
         </TabsContent>
       </Tabs>
-
-      {/* Edit Dialog */}
       <Dialog open={!!editTx} onOpenChange={(o) => !o && setEditTx(null)}>
         <DialogContent
           className="max-h-[90vh] overflow-y-auto"
@@ -814,8 +816,6 @@ export function History({ onNavigate: _onNavigate }: HistoryProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Delete Confirm Dialog */}
       <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <DialogContent data-ocid="history.delete.dialog">
           <DialogHeader>

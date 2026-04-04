@@ -6,6 +6,7 @@ import { AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { CategoryIcon } from "../components/CategoryIcon";
+import { HelpSheet } from "../components/HelpSheet";
 import { suggestCategory } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
 import { useTranslation } from "../hooks/useTranslation";
@@ -21,6 +22,7 @@ interface AddTransactionProps {
 export function AddTransaction({ onDone }: AddTransactionProps) {
   const t = useTranslation();
   const {
+    config,
     customCategories,
     addTransaction,
     getBudgetForCategory,
@@ -240,9 +242,15 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
 
   return (
     <div className="pb-24 px-4 pt-2 fade-in">
-      <h1 className="text-xl font-bold text-foreground mb-6">
-        {t("addTransaction")}
-      </h1>
+      <div className="flex items-center gap-2 mb-6">
+        <h1 className="text-xl font-bold text-foreground flex-1">
+          {t("addTransaction")}
+        </h1>
+        <HelpSheet
+          section="addTransaction"
+          language={config?.language ?? "en"}
+        />
+      </div>
 
       <div
         className="rounded-2xl border border-border p-5 mb-4"

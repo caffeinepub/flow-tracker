@@ -79,7 +79,30 @@ export type TranslationKey =
   | "onboarding2Title"
   | "onboarding2Desc"
   | "onboarding3Title"
-  | "onboarding3Desc";
+  | "onboarding3Desc"
+  // Bill Tracker
+  | "billTracker"
+  | "addBill"
+  | "billName"
+  | "billAmount"
+  | "billDueDate"
+  | "markPaid"
+  | "markUnpaid"
+  // Data Backup
+  | "backupData"
+  | "restoreData"
+  | "backupSuccess"
+  | "restoreSuccess"
+  | "backupWarning"
+  // Excess to Savings
+  | "excessToSavings"
+  | "moveToSavings"
+  // Help Guide
+  | "helpGuide"
+  // Due Soon
+  | "dueSoon"
+  | "noBills"
+  | "dataBackup";
 
 export const translations: Record<string, Record<TranslationKey, string>> = {
   en: {
@@ -166,6 +189,29 @@ export const translations: Record<string, Record<TranslationKey, string>> = {
     onboarding2Desc: "How do you want to split your income?",
     onboarding3Title: "You're all set!",
     onboarding3Desc: "Start tracking your finances with clarity",
+    // Bill Tracker
+    billTracker: "Bill Tracker",
+    addBill: "Add Bill",
+    billName: "Bill Name",
+    billAmount: "Amount",
+    billDueDate: "Due Day of Month",
+    markPaid: "Mark Paid",
+    markUnpaid: "Mark Unpaid",
+    // Data Backup
+    backupData: "Export Backup",
+    restoreData: "Import Backup",
+    backupSuccess: "Backup exported successfully",
+    restoreSuccess: "Data restored successfully. Reloading...",
+    backupWarning: "This will overwrite all your current data. Are you sure?",
+    // Excess to Savings
+    excessToSavings: "You have \u20b1{amount} unspent this period.",
+    moveToSavings: "Move to Savings",
+    // Help Guide
+    helpGuide: "Help",
+    // Due Soon
+    dueSoon: "Due Soon",
+    noBills: "No bills added yet.",
+    dataBackup: "Data Backup",
   },
   tl: {
     dashboard: "Dashboard",
@@ -251,5 +297,30 @@ export const translations: Record<string, Record<TranslationKey, string>> = {
     onboarding2Desc: "Paano mo gustong hatiin ang iyong kita?",
     onboarding3Title: "Handa ka na!",
     onboarding3Desc: "Simulan ang pag-track ng iyong mga pananalapi",
+    // Bill Tracker
+    billTracker: "Tracker ng mga Bayarin",
+    addBill: "Magdagdag ng Bayarin",
+    billName: "Pangalan ng Bayarin",
+    billAmount: "Halaga",
+    billDueDate: "Araw ng Pagbabayad",
+    markPaid: "Markahan na Bayad",
+    markUnpaid: "Markahan na Hindi Bayad",
+    // Data Backup
+    backupData: "I-export ang Backup",
+    restoreData: "I-import ang Backup",
+    backupSuccess: "Matagumpay na na-export ang backup",
+    restoreSuccess: "Matagumpay na na-restore ang data. Nagre-reload...",
+    backupWarning:
+      "Papalitan nito ang lahat ng iyong kasalukuyang data. Sigurado ka ba?",
+    // Excess to Savings
+    excessToSavings:
+      "Mayroon kang \u20b1{amount} na hindi nagastos ngayong panahon.",
+    moveToSavings: "Ilipat sa Ipon",
+    // Help Guide
+    helpGuide: "Tulong",
+    // Due Soon
+    dueSoon: "Malapit nang Bayaran",
+    noBills: "Wala pang bayarin na naidagdag.",
+    dataBackup: "Backup ng Data",
   },
 };

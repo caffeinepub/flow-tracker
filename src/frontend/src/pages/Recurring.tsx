@@ -20,6 +20,7 @@ import {
 import { Edit2, Plus, Repeat, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
 import type { RecurringFrequency, RecurringTransaction } from "../types";
@@ -159,7 +160,10 @@ export function Recurring() {
   return (
     <div className="pb-6 px-4 pt-2 fade-in">
       <div className="flex items-center justify-between mb-5">
-        <h1 className="text-xl font-bold text-foreground">Recurring</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold text-foreground">Recurring</h1>
+          <HelpSheet section="recurring" language={config?.language ?? "en"} />
+        </div>
         <Button
           size="sm"
           onClick={openAdd}

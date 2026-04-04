@@ -148,3 +148,12 @@ export interface IOU {
   events: IOUEvent[];
   direction?: "lent" | "borrowed"; // optional for backward compat; undefined = lent
 }
+
+export interface Bill {
+  id: string;
+  name: string;
+  amount: number;
+  dueDayOfMonth: number; // 1-31
+  isPaidThisPeriod: boolean;
+  notes?: string;
+}

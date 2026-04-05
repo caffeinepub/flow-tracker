@@ -5,13 +5,15 @@
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#0B1220",
   "background_color": "#0B1220",
+  "theme_color": "#0B1220",
+  "scope": "/",
   "icons": [
     {
       "src": "/favicon.ico",
       "sizes": "any",
       "type": "image/x-icon"
     }
-  ]
+  ],
+  "prefer_related_applications": false
 }

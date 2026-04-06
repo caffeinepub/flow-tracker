@@ -334,8 +334,12 @@ export function AddTransaction({
       );
 
       // Cross-reference: update transaction to point back to the IOU
+      // Also store iouShare on the transaction for reliable balance reversal even if IOU is later deleted
       if (splitTx?.id && newIOU?.id) {
-        updateTransaction(splitTx.id, { linkedIOUId: newIOU.id });
+        updateTransaction(splitTx.id, {
+          linkedIOUId: newIOU.id,
+          iouShare: splitShare,
+        });
         // No separate updateIOU needed — linkedTransactionId already set above
       }
 

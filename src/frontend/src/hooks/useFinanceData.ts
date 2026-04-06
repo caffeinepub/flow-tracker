@@ -502,6 +502,7 @@ export function useFinanceData() {
 
           // For split expenses: the account was debited the FULL amount (your share + IOU share).
           // So on delete we must reverse the full amount, not just tx.amount (your share).
+          // We use tx.iouShare as a reliable fallback in case the IOU was already deleted.
           let fullReversal = tx.amount;
           let linkedIOUId: string | undefined;
           if (tx.type === "expense" && tx.linkedIOUId) {
@@ -509,6 +510,9 @@ export function useFinanceData() {
             if (linked) {
               fullReversal = tx.amount + linked.amountLent;
               linkedIOUId = linked.id;
+            } else if (tx.iouShare) {
+              // IOU was already deleted — use the stored iouShare for correct reversal
+              fullReversal = tx.amount + tx.iouShare;
             }
           }
 
@@ -1453,8 +1457,12 @@ export function useFinanceData() {
                 ? a.id === txAccount.split(">")[0]
                 : a.name === txAccount;
               if (!matches) return a;
-              // Reverse only the IOU share (the other person's portion)
-              return { ...a, balance: a.balance + iou.amountLent };
+              // Reverse the FULL debited amount (your share + IOU share).
+              // The account was originally charged the full bill via debitAccount,
+              // so we must add back both the linked tx amount (your share) and the IOU amount.
+              const fullReversal =
+                iou.amountLent + (linkedTx ? linkedTx.amount : 0);
+              return { ...a, balance: a.balance + fullReversal };
             }),
           );
         }

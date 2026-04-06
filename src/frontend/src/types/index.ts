@@ -120,6 +120,7 @@ export interface Transaction {
   account?: string; // optional — which account this transaction belongs to
   isOpeningBalance?: boolean; // true for sub-account opening balance transactions
   linkedIOUId?: string; // id of linked IOU (for split expenses)
+  iouShare?: number; // the other person's share amount (stored for reliable balance reversal even if IOU is deleted)
 }
 
 export interface SalaryPeriod {

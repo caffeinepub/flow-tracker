@@ -24,6 +24,7 @@ import { Reports } from "./Reports";
 
 interface HistoryProps {
   onNavigate?: (tab: Tab) => void;
+  privacyMode?: boolean;
 }
 
 type PeriodFilter = "all" | "current" | string; // string = period id
@@ -39,7 +40,10 @@ interface EditState {
   account: string;
 }
 
-export function History({ onNavigate: _onNavigate }: HistoryProps) {
+export function History({
+  onNavigate: _onNavigate,
+  privacyMode = false,
+}: HistoryProps) {
   const t = useTranslation();
   const {
     config,
@@ -56,6 +60,8 @@ export function History({ onNavigate: _onNavigate }: HistoryProps) {
     debitAccount,
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
+  const pAmt = (val: number) =>
+    privacyMode ? "••••••" : formatAmount(val, currency);
 
   // Period filter
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("current");
@@ -536,7 +542,7 @@ export function History({ onNavigate: _onNavigate }: HistoryProps) {
                             }}
                           >
                             {tx.type === "income" ? "+" : "-"}
-                            {formatAmount(tx.amount, currency)}
+                            {pAmt(tx.amount)}
                           </span>
                           {/* Type badge */}
                           <span

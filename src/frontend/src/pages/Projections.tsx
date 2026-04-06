@@ -64,7 +64,11 @@ function getMonthsForRange(range: TimeRange, customMonths: number): number {
 // Filter key encoding: "all" | "cat:CatName" | "sub:CatName:SubName"
 type FilterKey = string;
 
-export function Projections() {
+interface ProjectionsProps {
+  privacyMode?: boolean;
+}
+
+export function Projections({ privacyMode = false }: ProjectionsProps) {
   const {
     config,
     customCategories,
@@ -80,6 +84,8 @@ export function Projections() {
   } = useFinanceData();
 
   const currency = config?.currency ?? "PHP";
+  const pAmt = (val: number) =>
+    privacyMode ? "••••••" : formatAmount(val, currency);
   const defaultSalary = config?.salary ?? 19000;
 
   const [timeRange, setTimeRange] = useState<TimeRange>("1y");
@@ -473,7 +479,7 @@ export function Projections() {
                 </span>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Default from salary: {formatAmount(defaultSalary, currency)}
+                Default from salary: {pAmt(defaultSalary)}
               </p>
             </div>
             <div>
@@ -543,8 +549,7 @@ export function Projections() {
                     Drag to see how a different income changes your projections
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    Base:{" "}
-                    {formatAmount(projectionSettings.monthlyIncome, currency)}
+                    Base: {pAmt(projectionSettings.monthlyIncome)}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
@@ -552,7 +557,7 @@ export function Projections() {
                     className="text-sm font-bold"
                     style={{ color: "oklch(var(--primary))" }}
                   >
-                    {formatAmount(scenarioIncome, currency)}
+                    {pAmt(scenarioIncome)}
                   </span>
                   <button
                     type="button"
@@ -575,8 +580,8 @@ export function Projections() {
                 data-ocid="projections.scenario_income.slider"
               />
               <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                <span>{formatAmount(minIncome, currency)}</span>
-                <span>{formatAmount(maxIncome, currency)}</span>
+                <span>{pAmt(minIncome)}</span>
+                <span>{pAmt(maxIncome)}</span>
               </div>
             </div>
             {showReturnRateSlider && (
@@ -771,10 +776,10 @@ export function Projections() {
                     className="text-sm font-bold"
                     style={{ color: "oklch(var(--primary))" }}
                   >
-                    {formatAmount(finalSavings, currency)}
+                    {pAmt(finalSavings)}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
-                    {formatAmount(monthlySavings, currency)}/mo
+                    {pAmt(monthlySavings)}/mo
                   </p>
                 </div>
                 <div
@@ -794,7 +799,7 @@ export function Projections() {
                     className="text-sm font-bold"
                     style={{ color: "oklch(0.68 0.17 195)" }}
                   >
-                    {formatAmount(finalInvestments, currency)}
+                    {pAmt(finalInvestments)}
                   </p>
                   <p className="text-[10px] text-muted-foreground">
                     {scenarioRate}% annual return
@@ -818,10 +823,10 @@ export function Projections() {
                   className="text-sm font-bold"
                   style={{ color: filterLineColor }}
                 >
-                  {formatAmount(finalFiltered, currency)}
+                  {pAmt(finalFiltered)}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  {formatAmount(filteredMonthlyBudget ?? 0, currency)}/mo
+                  {pAmt(filteredMonthlyBudget ?? 0)}/mo
                 </p>
               </div>
             )}
@@ -860,7 +865,7 @@ export function Projections() {
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [
-                      formatAmount(value, currency),
+                      pAmt(value),
                       name.charAt(0).toUpperCase() + name.slice(1),
                     ]}
                     contentStyle={{
@@ -990,7 +995,7 @@ export function Projections() {
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {goal.subCategoryName} · Target:{" "}
-                            {formatAmount(goal.targetAmount, currency)}
+                            {pAmt(goal.targetAmount)}
                           </p>
                           {hasSaved && (
                             <>
@@ -999,9 +1004,8 @@ export function Projections() {
                                 className="h-1.5 mt-2 mb-1"
                               />
                               <p className="text-[10px] text-muted-foreground">
-                                Saved:{" "}
-                                {formatAmount(goal.currentSaved ?? 0, currency)}{" "}
-                                / {formatAmount(goal.targetAmount, currency)}{" "}
+                                Saved: {pAmt(goal.currentSaved ?? 0)} /{" "}
+                                {pAmt(goal.targetAmount)}{" "}
                                 <span
                                   style={{ color: "oklch(var(--primary))" }}
                                 >
@@ -1016,8 +1020,8 @@ export function Projections() {
                                   className="text-xs mt-1"
                                   style={{ color: "oklch(var(--primary))" }}
                                 >
-                                  {formatAmount(remaining, currency)} remaining
-                                  · reach in {monthsToReach} months (
+                                  {pAmt(remaining)} remaining · reach in{" "}
+                                  {monthsToReach} months (
                                   {format(reachDate, "MMM yyyy")})
                                 </p>
                               ) : monthsToReach === 0 ? (
@@ -1042,9 +1046,8 @@ export function Projections() {
                               className="text-xs mt-1"
                               style={{ color: "oklch(var(--primary))" }}
                             >
-                              At {formatAmount(monthly, currency)}/mo → reach in{" "}
-                              {monthsToReach} months (
-                              {format(reachDate, "MMM yyyy")})
+                              At {pAmt(monthly)}/mo → reach in {monthsToReach}{" "}
+                              months ({format(reachDate, "MMM yyyy")})
                             </p>
                           ) : !hasSaved ? (
                             <p className="text-xs text-muted-foreground mt-1">
@@ -1197,8 +1200,7 @@ export function Projections() {
                             {sub.name}
                           </p>
                           <p className="text-[10px] text-muted-foreground">
-                            {cat.name} · {sub.pct ?? 0}% ·{" "}
-                            {formatAmount(monthly, currency)}/mo
+                            {cat.name} · {sub.pct ?? 0}% · {pAmt(monthly)}/mo
                           </p>
                         </div>
                       </div>
@@ -1260,10 +1262,7 @@ export function Projections() {
                                 width={28}
                               />
                               <Tooltip
-                                formatter={(v: number) => [
-                                  formatAmount(v, currency),
-                                  sub.name,
-                                ]}
+                                formatter={(v: number) => [pAmt(v), sub.name]}
                                 contentStyle={{
                                   backgroundColor: "oklch(var(--card))",
                                   border: "1px solid oklch(var(--border))",
@@ -1295,11 +1294,7 @@ export function Projections() {
                                     {goalForSub.label}
                                   </span>
                                   {" · "}
-                                  Target:{" "}
-                                  {formatAmount(
-                                    goalForSub.targetAmount,
-                                    currency,
-                                  )}
+                                  Target: {pAmt(goalForSub.targetAmount)}
                                 </p>
                                 {(goalForSub.currentSaved ?? 0) > 0 && (
                                   <>
@@ -1668,6 +1663,11 @@ export function Projections() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Calculated locally footer */}
+      <p className="text-center text-xs text-muted-foreground pb-6 mt-2">
+        🔒 Calculated locally · Your data never leaves this device
+      </p>
     </div>
   );
 }

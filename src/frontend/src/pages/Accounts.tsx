@@ -179,7 +179,11 @@ function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
-export function Accounts() {
+interface AccountsProps {
+  privacyMode?: boolean;
+}
+
+export function Accounts({ privacyMode = false }: AccountsProps) {
   const {
     config,
     accounts,
@@ -211,6 +215,8 @@ export function Accounts() {
     deleteSubAccount,
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
+  const pAmt = (val: number) =>
+    privacyMode ? "••••••" : formatAmount(val, currency);
 
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<AddAccountForm>(emptyForm());
@@ -779,7 +785,7 @@ export function Accounts() {
               className="text-sm font-bold"
               style={{ color: "oklch(var(--primary))" }}
             >
-              {formatAmount(totalAssets + totalIOUsOwed, currency)}
+              {pAmt(totalAssets + totalIOUsOwed)}
             </p>
           </div>
           <div className="text-center border-x border-border">
@@ -791,7 +797,7 @@ export function Accounts() {
                   totalLiabilities > 0 ? "#EB5757" : "oklch(var(--foreground))",
               }}
             >
-              {formatAmount(totalLiabilities, currency)}
+              {pAmt(totalLiabilities)}
             </p>
           </div>
           <div className="text-center">
@@ -802,7 +808,7 @@ export function Accounts() {
                 color: netWorth >= 0 ? "oklch(var(--primary))" : "#EB5757",
               }}
             >
-              {formatAmount(netWorth, currency)}
+              {pAmt(netWorth)}
             </p>
           </div>
         </div>
@@ -819,7 +825,7 @@ export function Accounts() {
               className="text-xs font-semibold"
               style={{ color: "#20D18A" }}
             >
-              +{formatAmount(totalIOUsOwed, currency)}
+              +{pAmt(totalIOUsOwed)}
             </span>
           </div>
         )}
@@ -836,7 +842,7 @@ export function Accounts() {
               className="text-xs font-semibold"
               style={{ color: "#EB5757" }}
             >
-              -{formatAmount(totalIOUsBorrowed, currency)}
+              -{pAmt(totalIOUsBorrowed)}
             </span>
           </div>
         )}
@@ -971,11 +977,11 @@ export function Accounts() {
                           }}
                         >
                           {acc.type === "credit" ? "-" : ""}
-                          {formatAmount(Math.abs(acc.balance), currency)}
+                          {pAmt(Math.abs(acc.balance))}
                         </span>
                         {acc.type === "credit" && acc.creditLimit && (
                           <span className="text-xs text-muted-foreground">
-                            Limit: {formatAmount(acc.creditLimit, currency)}
+                            Limit: {pAmt(acc.creditLimit)}
                           </span>
                         )}
                         {acc.type === "credit" && acc.dueDate && (
@@ -1101,7 +1107,7 @@ export function Accounts() {
                                   className="text-sm font-bold flex-shrink-0"
                                   style={{ color: "oklch(var(--primary))" }}
                                 >
-                                  {formatAmount(sub.balance, currency)}
+                                  {pAmt(sub.balance)}
                                 </span>
                                 <div className="flex gap-1 flex-shrink-0">
                                   <button
@@ -1238,13 +1244,13 @@ export function Accounts() {
                   <p className="text-xs text-muted-foreground">
                     {totalIOUsOwed > 0 && (
                       <span style={{ color: "#20D18A" }}>
-                        {formatAmount(totalIOUsOwed, currency)} owed to you
+                        {pAmt(totalIOUsOwed)} owed to you
                       </span>
                     )}
                     {totalIOUsOwed > 0 && totalIOUsBorrowed > 0 && " · "}
                     {totalIOUsBorrowed > 0 && (
                       <span style={{ color: "#EB5757" }}>
-                        {formatAmount(totalIOUsBorrowed, currency)} you owe
+                        {pAmt(totalIOUsBorrowed)} you owe
                       </span>
                     )}
                     {totalIOUsOwed === 0 &&
@@ -1557,7 +1563,7 @@ export function Accounts() {
                           {bill.name}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatAmount(bill.amount, currency)} · Due:{" "}
+                          {pAmt(bill.amount)} · Due:{" "}
                           {ordinal(bill.dueDayOfMonth)}
                         </p>
                         {bill.notes && (
@@ -1764,7 +1770,7 @@ export function Accounts() {
                     }}
                   >
                     {tx.type === "income" ? "+" : "-"}
-                    {formatAmount(tx.amount, currency)}
+                    {pAmt(tx.amount)}
                   </span>
                 </div>
               ))}
@@ -1850,7 +1856,7 @@ export function Accounts() {
                               }}
                             >
                               {isIncome ? "+" : isExpense ? "-" : ""}
-                              {formatAmount(tx.amount, currency)}
+                              {pAmt(tx.amount)}
                             </span>
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
@@ -2144,7 +2150,7 @@ export function Accounts() {
                           }}
                         >
                           {tx.type === "income" ? "+" : "-"}
-                          {formatAmount(tx.amount, currency)}
+                          {pAmt(tx.amount)}
                         </span>
                       </div>
                     ))}
@@ -2362,15 +2368,14 @@ export function Accounts() {
                 <SelectContent>
                   {accounts.flatMap((acc) => [
                     <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name} ({formatAmount(acc.balance, currency)})
+                      {acc.name} ({pAmt(acc.balance)})
                     </SelectItem>,
                     ...(acc.subAccounts ?? []).map((sub) => (
                       <SelectItem
                         key={`${acc.id}>${sub.id}`}
                         value={`${acc.id}>${sub.id}`}
                       >
-                          {acc.name} › {sub.name} (
-                        {formatAmount(sub.balance, currency)})
+                          {acc.name} › {sub.name} ({pAmt(sub.balance)})
                       </SelectItem>
                     )),
                   ])}
@@ -2394,15 +2399,14 @@ export function Accounts() {
                 <SelectContent>
                   {accounts.flatMap((acc) => [
                     <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name} ({formatAmount(acc.balance, currency)})
+                      {acc.name} ({pAmt(acc.balance)})
                     </SelectItem>,
                     ...(acc.subAccounts ?? []).map((sub) => (
                       <SelectItem
                         key={`${acc.id}>${sub.id}`}
                         value={`${acc.id}>${sub.id}`}
                       >
-                          {acc.name} › {sub.name} (
-                        {formatAmount(sub.balance, currency)})
+                          {acc.name} › {sub.name} ({pAmt(sub.balance)})
                       </SelectItem>
                     )),
                   ])}
@@ -2896,7 +2900,7 @@ export function Accounts() {
               >
                 Outstanding:{" "}
                 <strong style={{ color: "oklch(var(--foreground))" }}>
-                  {formatAmount(getIOUBalance(repayingIOU), currency)}
+                  {pAmt(getIOUBalance(repayingIOU))}
                 </strong>
               </div>
               <div>
@@ -3014,10 +3018,7 @@ export function Accounts() {
               >
                 Still owe:{" "}
                 <strong style={{ color: "#EB5757" }}>
-                  {formatAmount(
-                    getIOUBalance(repayBorrowedIOU_state),
-                    currency,
-                  )}
+                  {pAmt(getIOUBalance(repayBorrowedIOU_state))}
                 </strong>
               </div>
               <div>
@@ -3058,7 +3059,7 @@ export function Accounts() {
                   <SelectContent>
                     {accounts.map((acc) => (
                       <SelectItem key={acc.id} value={acc.id}>
-                        {acc.name} ({formatAmount(acc.balance, currency)})
+                        {acc.name} ({pAmt(acc.balance)})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -3203,7 +3204,7 @@ export function Accounts() {
                 className="text-lg font-bold mt-0.5"
                 style={{ color: accentColor }}
               >
-                {formatAmount(balance, currency)}
+                {pAmt(balance)}
                 <span className="text-xs font-normal text-muted-foreground ml-1">
                   {direction === "lent" ? "remaining" : "you owe"}
                 </span>
@@ -3212,7 +3213,7 @@ export function Accounts() {
             {(iou.status === "paid" || iou.status === "forgiven") && (
               <p className="text-sm text-muted-foreground mt-0.5">
                 {iou.status === "forgiven"
-                  ? `Forgiven ${formatAmount(iou.amountLent, currency)}`
+                  ? `Forgiven ${pAmt(iou.amountLent)}`
                   : "Settled"}
               </p>
             )}
@@ -3233,7 +3234,7 @@ export function Accounts() {
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
               {direction === "lent" ? "Lent" : "Borrowed"}{" "}
-              {formatAmount(iou.amountLent, currency)}
+              {pAmt(iou.amountLent)}
             </span>
             <span
               style={{
@@ -3245,8 +3246,8 @@ export function Accounts() {
           </div>
           {expectedWithInterest && (
             <p className="text-xs" style={{ color: "#F2C94C" }}>
-              Expected w/interest:{" "}
-              {formatAmount(expectedWithInterest, currency)} ({iou.interestPct}
+              Expected w/interest: {pAmt(expectedWithInterest)} (
+              {iou.interestPct}
               %)
             </p>
           )}
@@ -3408,7 +3409,7 @@ export function Accounts() {
                           : ev.type === "lend" || ev.type === "borrow"
                             ? "-"
                             : ""}
-                        {formatAmount(ev.amount, currency)}
+                        {pAmt(ev.amount)}
                       </span>
                     </div>
                   );

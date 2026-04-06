@@ -222,7 +222,9 @@ export function Reports() {
         (t) =>
           t.type === "income" &&
           t.mainCategory !== "Transfer" &&
-          !t.isOpeningBalance,
+          !t.isOpeningBalance &&
+          t.subCategory !== "Opening Balance" &&
+          !t.description?.toLowerCase().includes("opening balance"),
       )
       .reduce((s, t) => s + t.amount, 0);
 
@@ -232,7 +234,9 @@ export function Reports() {
         (t) =>
           t.type === "income" &&
           t.mainCategory !== "Transfer" &&
-          !t.isOpeningBalance,
+          !t.isOpeningBalance &&
+          t.subCategory !== "Opening Balance" &&
+          !t.description?.toLowerCase().includes("opening balance"),
       )
       .reduce(
         (acc, t) => {

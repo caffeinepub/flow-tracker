@@ -45,6 +45,7 @@ import { useTranslation } from "../hooks/useTranslation";
 
 interface DashboardProps {
   onNavigate?: (tab: Tab) => void;
+  privacyMode?: boolean;
 }
 
 const GOAL_PREVIEW_COUNT = 3;
@@ -59,7 +60,7 @@ function loadCollapsed(): Record<string, boolean> {
   }
 }
 
-export function Dashboard({ onNavigate }: DashboardProps) {
+export function Dashboard({ onNavigate, privacyMode = false }: DashboardProps) {
   const t = useTranslation();
   const {
     config,
@@ -80,6 +81,8 @@ export function Dashboard({ onNavigate }: DashboardProps) {
   } = useFinanceData();
 
   const currency = config?.currency ?? "PHP";
+  const pAmt = (val: number) =>
+    privacyMode ? "••••••" : formatAmount(val, currency);
   const ccAlerts = getCCAlerts();
   const [showAllGoals, setShowAllGoals] = useState(false);
   const [dismissedExpiry, setDismissedExpiry] = useState(false);
@@ -288,8 +291,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 className="text-xs font-medium flex-1"
                 style={{ color: "#20D18A" }}
               >
-                You have {formatAmount(remaining, currency)} unspent this
-                period.
+                You have {pAmt(remaining)} unspent this period.
               </p>
             </div>
             <div className="flex gap-2">
@@ -327,7 +329,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
             <SheetTitle>Move to Savings</SheetTitle>
           </SheetHeader>
           <p className="text-sm text-muted-foreground mb-4">
-            Move {formatAmount(remaining, currency)} unspent budget to savings.
+            Move {pAmt(remaining)} unspent budget to savings.
           </p>
           {savingsGoals.length > 0 && (
             <div className="mb-4">
@@ -425,7 +427,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               className="text-xs font-semibold"
               style={{ color: "#20D18A" }}
             >
-              {formatAmount(totalIOUsOwed, currency)} owed to you
+              {pAmt(totalIOUsOwed)} owed to you
             </span>
             <span className="text-xs text-muted-foreground ml-auto">
               View IOUs &rarr;
@@ -500,7 +502,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                         {cat.name}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {formatAmount(getBudgetForCategory(cat.name), currency)}
+                        {pAmt(getBudgetForCategory(cat.name))}
                       </div>
                     </div>
                     <span
@@ -543,7 +545,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                   {t("totalIncome")}
                 </span>
                 <span className="font-semibold text-success">
-                  {formatAmount(totalIncome, currency)}
+                  {pAmt(totalIncome)}
                 </span>
               </div>
               <div className="flex justify-between items-center">
@@ -559,7 +561,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                         : "oklch(var(--foreground))",
                   }}
                 >
-                  {formatAmount(totalExpenses, currency)}
+                  {pAmt(totalExpenses)}
                 </span>
               </div>
               <div className="border-t border-border pt-3 flex justify-between items-center">
@@ -572,7 +574,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                     color: remaining >= 0 ? "oklch(var(--primary))" : "#EB5757",
                   }}
                 >
-                  {formatAmount(remaining, currency)}
+                  {pAmt(remaining)}
                 </span>
               </div>
               <div>
@@ -680,7 +682,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                         <div className="flex justify-between items-center">
                           <span className="text-[10px] text-muted-foreground">
                             {rem > 0
-                              ? `${formatAmount(rem, currency)} to go`
+                              ? `${pAmt(rem)} to go`
                               : "\uD83C\uDF89 Goal reached!"}
                           </span>
                           {reachDate && monthly > 0 && (
@@ -767,7 +769,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                           {sub.name}
                         </span>
                         <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
-                          {formatAmount(spent, currency)}
+                          {pAmt(spent)}
                         </span>
                       </div>
                       <div
@@ -783,7 +785,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                         />
                       </div>
                       <div className="text-[10px] text-muted-foreground mt-0.5">
-                        {t("budget")}: {formatAmount(budget, currency)}
+                        {t("budget")}: {pAmt(budget)}
                         {sub.pct ? ` (${sub.pct}%)` : ""}
                       </div>
                     </div>

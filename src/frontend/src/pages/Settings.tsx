@@ -26,9 +26,12 @@ import {
   ChevronDown,
   ChevronUp,
   Database,
+  Delete,
   Download,
   HelpCircle,
   Loader2,
+  Lock,
+  LockOpen,
   Moon,
   Plus,
   RefreshCw,
@@ -40,7 +43,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { HelpSheet } from "../components/HelpSheet";
 import {
@@ -116,6 +119,83 @@ export function Settings() {
   const [pendingRestoreFile, setPendingRestoreFile] = useState<string | null>(
     null,
   );
+
+  // ── PIN Lock state ───────────────────────────────────────────────────────────
+  const [hasPIN, setHasPIN] = useState(!!localStorage.getItem("sft_pin_hash"));
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinDialogStep, setPinDialogStep] = useState<1 | 2>(1);
+  const [pinEntry, setPinEntry] = useState("");
+  const [pinConfirm, setPinConfirm] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [showRemovePinAlert, setShowRemovePinAlert] = useState(false);
+  const isSettingPin = useRef(false);
+
+  async function hashPin(pin: string): Promise<string> {
+    const buf = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(pin),
+    );
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  const handlePinDigit = (d: string) => {
+    if (pinDialogStep === 1) {
+      if (pinEntry.length < 6) {
+        const next = pinEntry + d;
+        setPinEntry(next);
+        if (next.length === 6) {
+          // Auto-advance to step 2
+          setTimeout(() => setPinDialogStep(2), 120);
+        }
+      }
+    } else {
+      if (pinConfirm.length < 6) setPinConfirm((prev) => prev + d);
+    }
+  };
+
+  const handlePinBackspace = () => {
+    if (pinDialogStep === 1) setPinEntry((prev) => prev.slice(0, -1));
+    else setPinConfirm((prev) => prev.slice(0, -1));
+  };
+
+  const handlePinDialogClose = () => {
+    setShowPinDialog(false);
+    setPinDialogStep(1);
+    setPinEntry("");
+    setPinConfirm("");
+    setPinError(null);
+    isSettingPin.current = false;
+  };
+
+  const currentStepDigits = pinDialogStep === 1 ? pinEntry : pinConfirm;
+
+  const handleConfirmPin = async () => {
+    if (isSettingPin.current) return;
+    if (pinEntry !== pinConfirm) {
+      setPinError("PINs do not match. Please try again.");
+      setPinDialogStep(1);
+      setPinEntry("");
+      setPinConfirm("");
+      return;
+    }
+    isSettingPin.current = true;
+    const hash = await hashPin(pinEntry);
+    localStorage.setItem("sft_pin_hash", hash);
+    setHasPIN(true);
+    handlePinDialogClose();
+    toast.success("PIN set successfully");
+  };
+
+  const handleRemovePin = () => {
+    localStorage.removeItem("sft_pin_hash");
+    setHasPIN(false);
+    setShowRemovePinAlert(false);
+    toast.success("PIN removed");
+  };
+
+  // ── end PIN Lock state ─────────────────────────────────────────────────────
 
   // Next Period Draft form state
   const [showNextPeriodForm, setShowNextPeriodForm] = useState(false);
@@ -2186,22 +2266,235 @@ export function Settings() {
         </div>
       </div>
 
+      {/* Security / PIN Lock Section */}
+      <Section title="Security">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {hasPIN ? (
+              <Lock size={16} style={{ color: "oklch(var(--primary))" }} />
+            ) : (
+              <LockOpen size={16} className="text-muted-foreground" />
+            )}
+            <div>
+              <p className="text-sm font-semibold text-foreground">PIN Lock</p>
+              <p className="text-xs text-muted-foreground">
+                {hasPIN
+                  ? "6-digit PIN is active"
+                  : "Protect the app with a 6-digit PIN."}
+              </p>
+            </div>
+          </div>
+          {hasPIN && (
+            <span
+              className="text-xs font-semibold px-2 py-0.5 rounded-full"
+              style={{
+                backgroundColor: "oklch(var(--primary) / 0.15)",
+                color: "oklch(var(--primary))",
+              }}
+            >
+              Active
+            </span>
+          )}
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 gap-2"
+            onClick={() => {
+              setPinDialogStep(1);
+              setPinEntry("");
+              setPinConfirm("");
+              setPinError(null);
+              setShowPinDialog(true);
+            }}
+            data-ocid="settings.pin.set_button"
+          >
+            <Lock size={14} />
+            {hasPIN ? "Change PIN" : "Set PIN"}
+          </Button>
+          {hasPIN && (
+            <Button
+              variant="outline"
+              className="gap-2 text-destructive border-destructive/30"
+              onClick={() => setShowRemovePinAlert(true)}
+              data-ocid="settings.pin.remove_button"
+            >
+              <LockOpen size={14} />
+              Remove
+            </Button>
+          )}
+        </div>
+        {!hasPIN && (
+          <p className="text-xs text-muted-foreground mt-2">
+            After setting a PIN, the app will lock on open and after 5 minutes
+            of inactivity. Make sure to export a JSON backup first!
+          </p>
+        )}
+      </Section>
+
+      {/* Set/Change PIN Dialog */}
+      <Dialog
+        open={showPinDialog}
+        onOpenChange={(open) => {
+          if (!open) handlePinDialogClose();
+        }}
+      >
+        <DialogContent
+          className="max-w-xs"
+          data-ocid="settings.pin.dialog"
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>
+              {pinDialogStep === 1
+                ? hasPIN
+                  ? "Enter new PIN"
+                  : "Set a 6-digit PIN"
+                : "Confirm PIN"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col items-center gap-4 py-2">
+            {pinError && (
+              <p className="text-xs text-destructive text-center">{pinError}</p>
+            )}
+            <p className="text-xs text-muted-foreground text-center">
+              {pinDialogStep === 1
+                ? "Enter your new 6-digit PIN"
+                : "Re-enter to confirm"}
+            </p>
+
+            {/* Dots */}
+            <div className="flex items-center gap-3">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: positional dots
+                  key={i}
+                  className="w-4 h-4 rounded-full border-2 transition-all"
+                  style={{
+                    backgroundColor:
+                      i < currentStepDigits.length
+                        ? "oklch(var(--primary))"
+                        : "transparent",
+                    borderColor:
+                      i < currentStepDigits.length
+                        ? "oklch(var(--primary))"
+                        : "oklch(var(--border))",
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Numpad */}
+            <div className="grid grid-cols-3 gap-3 w-full">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => handlePinDigit(d)}
+                  className="h-12 rounded-xl text-lg font-semibold text-foreground transition-all active:scale-95"
+                  style={{ backgroundColor: "oklch(var(--secondary))" }}
+                >
+                  {d}
+                </button>
+              ))}
+              <div className="h-12" />
+              <button
+                type="button"
+                onClick={() => handlePinDigit("0")}
+                className="h-12 rounded-xl text-lg font-semibold text-foreground transition-all active:scale-95"
+                style={{ backgroundColor: "oklch(var(--secondary))" }}
+              >
+                0
+              </button>
+              <button
+                type="button"
+                onClick={handlePinBackspace}
+                className="h-12 rounded-xl flex items-center justify-center text-foreground transition-all active:scale-95"
+                style={{ backgroundColor: "oklch(var(--secondary))" }}
+                aria-label="Backspace"
+              >
+                <Delete size={18} />
+              </button>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={handlePinDialogClose}
+              data-ocid="settings.pin.cancel_button"
+            >
+              Cancel
+            </Button>
+            {pinDialogStep === 2 && pinConfirm.length === 6 && (
+              <Button
+                onClick={handleConfirmPin}
+                style={{
+                  backgroundColor: "oklch(var(--primary))",
+                  color: "oklch(var(--primary-foreground))",
+                }}
+                data-ocid="settings.pin.confirm_button"
+              >
+                Confirm PIN
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove PIN Confirmation */}
+      <AlertDialog
+        open={showRemovePinAlert}
+        onOpenChange={setShowRemovePinAlert}
+      >
+        <AlertDialogContent data-ocid="settings.pin.remove_dialog">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove PIN Lock?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove the PIN protection. Anyone with access to your
+              device will be able to open the app.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-ocid="settings.pin.remove_cancel_button">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRemovePin}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-ocid="settings.pin.remove_confirm_button"
+            >
+              Remove PIN
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Data Backup Section */}
       <Section title="Data Backup">
         <p className="text-xs text-muted-foreground mb-3">
           Export all your data as a backup file, or restore from a previous
           backup.
         </p>
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/* Prominent Export Button */}
           <Button
-            variant="outline"
-            className="w-full gap-2"
+            className="w-full gap-2 h-12 text-base font-semibold"
+            style={{
+              backgroundColor: "oklch(var(--primary))",
+              color: "oklch(var(--primary-foreground))",
+            }}
             onClick={handleExportBackup}
             data-ocid="settings.backup.export_button"
           >
-            <Database size={14} />
-            Export Backup
+            <Download size={18} />
+            Export JSON Backup
           </Button>
+          <p className="text-xs text-muted-foreground text-center -mt-1">
+            Export a backup before enabling PIN lock so you can restore your
+            data if you forget your PIN.
+          </p>
           <Button
             variant="outline"
             className="w-full gap-2"

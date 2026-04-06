@@ -1,8 +1,9 @@
 import { Toaster } from "@/components/ui/sonner";
-import { Leaf, Moon, Sun } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Eye, EyeOff, Leaf, Moon, Sun } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { BottomNav } from "./components/BottomNav";
 import type { Tab } from "./components/BottomNav";
+import { PinLockScreen } from "./components/PinLockScreen";
 import { useFinanceData } from "./hooks/useFinanceData";
 import { useTranslation } from "./hooks/useTranslation";
 import { Accounts } from "./pages/Accounts";
@@ -16,10 +17,27 @@ import { Projections } from "./pages/Projections";
 import { Settings } from "./pages/Settings";
 import type { Config } from "./types";
 
+const INACTIVITY_LIMIT_MS = 5 * 60 * 1000; // 5 minutes
+const LAST_ACTIVITY_KEY = "sft_last_activity";
+
+function hasPinSet(): boolean {
+  try {
+    return !!localStorage.getItem("sft_pin_hash");
+  } catch {
+    return false;
+  }
+}
+
 export default function App() {
   const { config, setConfig, isOnboarded } = useFinanceData();
   const t = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+
+  // Privacy mode — session only, always starts false
+  const [privacyMode, setPrivacyMode] = useState(false);
+
+  // PIN lock state
+  const [pinLocked, setPinLocked] = useState(() => hasPinSet());
 
   // Intro screen — shown only once, tracked by localStorage
   const [showIntro, setShowIntro] = useState(() => {
@@ -30,6 +48,48 @@ export default function App() {
     }
   });
 
+  // ── Inactivity / visibility-based PIN re-lock ────────────────────────────
+  const lastUnlockTime = useRef<number>(Date.now());
+
+  // Track user activity
+  useEffect(() => {
+    const updateActivity = () => {
+      try {
+        sessionStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+      } catch {}
+    };
+    window.addEventListener("pointerdown", updateActivity, { passive: true });
+    window.addEventListener("keydown", updateActivity, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", updateActivity);
+      window.removeEventListener("keydown", updateActivity);
+    };
+  }, []);
+
+  // Re-lock when tab becomes visible after inactivity
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && hasPinSet()) {
+        let lastActivity: number;
+        try {
+          const stored = sessionStorage.getItem(LAST_ACTIVITY_KEY);
+          lastActivity = stored ? Number(stored) : lastUnlockTime.current;
+        } catch {
+          lastActivity = lastUnlockTime.current;
+        }
+        const elapsed = Date.now() - lastActivity;
+        if (elapsed > INACTIVITY_LIMIT_MS) {
+          setPinLocked(true);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  // ── Theme ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const isDark = config?.theme !== "light";
     document.documentElement.classList.toggle("dark", isDark);
@@ -54,6 +114,27 @@ export default function App() {
     } catch {}
     setShowIntro(false);
   };
+
+  const handleUnlock = () => {
+    lastUnlockTime.current = Date.now();
+    try {
+      sessionStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+    } catch {}
+    setPinLocked(false);
+  };
+
+  // ── PIN lock screen — shown FIRST before everything ──────────────────────
+  if (pinLocked) {
+    const isDark = config?.theme !== "light";
+    return (
+      <div className={isDark ? "dark" : ""}>
+        <div className="min-h-screen bg-background">
+          <PinLockScreen onUnlock={handleUnlock} />
+          <Toaster />
+        </div>
+      </div>
+    );
+  }
 
   // Detect browser language for intro screen
   const browserLang =
@@ -128,12 +209,29 @@ export default function App() {
               <span className="text-xs text-muted-foreground">
                 {config?.name}
               </span>
+              {/* Privacy Mode Toggle */}
+              <button
+                type="button"
+                onClick={() => setPrivacyMode((v) => !v)}
+                className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
+                style={{ backgroundColor: "oklch(var(--secondary))" }}
+                aria-label={privacyMode ? "Show amounts" : "Hide amounts"}
+                data-ocid="app.privacy_toggle"
+              >
+                {privacyMode ? (
+                  <EyeOff size={14} className="text-foreground" />
+                ) : (
+                  <Eye size={14} className="text-foreground" />
+                )}
+              </button>
+              {/* Theme Toggle */}
               <button
                 type="button"
                 onClick={handleThemeToggle}
                 className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
                 style={{ backgroundColor: "oklch(var(--secondary))" }}
                 aria-label="Toggle theme"
+                data-ocid="app.theme_toggle"
               >
                 {isDark ? (
                   <Sun size={14} className="text-foreground" />
@@ -150,13 +248,19 @@ export default function App() {
         </div>
 
         <main className="max-w-lg mx-auto">
-          {activeTab === "dashboard" && <Dashboard onNavigate={setActiveTab} />}
+          {activeTab === "dashboard" && (
+            <Dashboard onNavigate={setActiveTab} privacyMode={privacyMode} />
+          )}
           {activeTab === "add" && (
             <AddTransaction onDone={() => setActiveTab("dashboard")} />
           )}
-          {activeTab === "accounts" && <Accounts />}
-          {activeTab === "projections" && <Projections />}
-          {activeTab === "history" && <History onNavigate={setActiveTab} />}
+          {activeTab === "accounts" && <Accounts privacyMode={privacyMode} />}
+          {activeTab === "projections" && (
+            <Projections privacyMode={privacyMode} />
+          )}
+          {activeTab === "history" && (
+            <History onNavigate={setActiveTab} privacyMode={privacyMode} />
+          )}
           {activeTab === "notes" && <Notes />}
           {activeTab === "settings" && <Settings />}
         </main>

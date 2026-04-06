@@ -119,6 +119,7 @@ export interface Transaction {
   type: TransactionType;
   account?: string; // optional — which account this transaction belongs to
   isOpeningBalance?: boolean; // true for sub-account opening balance transactions
+  linkedIOUId?: string; // id of linked IOU (for split expenses)
 }
 
 export interface SalaryPeriod {
@@ -184,6 +185,7 @@ export interface IOU {
   status: "current" | "overdue" | "paid" | "forgiven";
   events: IOUEvent[];
   direction?: "lent" | "borrowed"; // optional for backward compat; undefined = lent
+  linkedTransactionId?: string; // id of linked split expense transaction
 }
 
 export interface Bill {

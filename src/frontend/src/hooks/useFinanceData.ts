@@ -488,11 +488,37 @@ export function useFinanceData() {
    */
   const deleteTransaction = useCallback(
     (id: string) => {
+      // Read IOUs synchronously from localStorage so we can calculate the full
+      // reversal amount before any state updates run.
+      const currentIOUs: IOU[] = JSON.parse(
+        localStorage.getItem("sft_ious") ?? "[]",
+      );
+
       setTransactions((prev) => {
         const tx = prev.find((t) => t.id === id);
         if (tx?.account) {
           const txAccount = tx.account;
           const isSubAccount = txAccount.includes(">");
+
+          // For split expenses: the account was debited the FULL amount (your share + IOU share).
+          // So on delete we must reverse the full amount, not just tx.amount (your share).
+          let fullReversal = tx.amount;
+          let linkedIOUId: string | undefined;
+          if (tx.type === "expense" && tx.linkedIOUId) {
+            const linked = currentIOUs.find((iou) => iou.id === tx.linkedIOUId);
+            if (linked) {
+              fullReversal = tx.amount + linked.amountLent;
+              linkedIOUId = linked.id;
+            }
+          }
+
+          // Remove linked IOU if this was a split expense
+          if (linkedIOUId) {
+            setIOUs((prevIOUs) =>
+              prevIOUs.filter((iou) => iou.id !== linkedIOUId),
+            );
+          }
+
           setAccounts((accs) =>
             accs.map((a) => {
               // For sub-accounts: match by parentId (before the ">")
@@ -503,7 +529,7 @@ export function useFinanceData() {
               if (!matches) return a;
               const delta =
                 tx.type === "expense"
-                  ? tx.amount // add back what was deducted
+                  ? fullReversal // add back the full debited amount
                   : tx.type === "income"
                     ? -tx.amount // deduct what was credited
                     : 0;
@@ -514,7 +540,7 @@ export function useFinanceData() {
         return prev.filter((t) => t.id !== id);
       });
     },
-    [setTransactions, setAccounts],
+    [setTransactions, setAccounts, setIOUs],
   );
 
   const startNewPeriod = useCallback(() => {
@@ -1160,6 +1186,15 @@ export function useFinanceData() {
     .reduce((sum, iou) => sum + getIOUBalance(iou), 0);
 
   // IOU CRUD
+  const updateIOU = useCallback(
+    (id: string, updates: Partial<IOU>) => {
+      setIOUs((prev) =>
+        prev.map((iou) => (iou.id === id ? { ...iou, ...updates } : iou)),
+      );
+    },
+    [setIOUs],
+  );
+
   const addIOU = useCallback(
     (data: Omit<IOU, "id" | "events" | "status">, sourceAccountId?: string) => {
       const id = crypto.randomUUID();
@@ -1195,6 +1230,7 @@ export function useFinanceData() {
           account: srcAcc?.name,
         });
       }
+      return newIOU;
     },
     [setIOUs, addTransaction, accounts, debitAccount],
   );
@@ -1391,9 +1427,45 @@ export function useFinanceData() {
 
   const deleteIOU = useCallback(
     (iouId: string) => {
-      setIOUs((prev) => prev.filter((iou) => iou.id !== iouId));
+      // Read IOUs and transactions synchronously from localStorage to avoid
+      // async state updater closure issues when doing cross-record cleanup.
+      const currentIOUs: IOU[] = JSON.parse(
+        localStorage.getItem("sft_ious") ?? "[]",
+      );
+      const currentTxs: Transaction[] = JSON.parse(
+        localStorage.getItem("sft_transactions") ?? "[]",
+      );
+
+      const iou = currentIOUs.find((i) => i.id === iouId);
+
+      if (iou?.linkedTransactionId) {
+        // This IOU was auto-created from a split expense.
+        // Reverse the IOU share from the account and remove the linked transaction.
+        const linkedTx = currentTxs.find(
+          (t) => t.id === iou.linkedTransactionId,
+        );
+        if (linkedTx?.account) {
+          const txAccount = linkedTx.account;
+          const isSubAccount = txAccount.includes(">");
+          setAccounts((accs) =>
+            accs.map((a) => {
+              const matches = isSubAccount
+                ? a.id === txAccount.split(">")[0]
+                : a.name === txAccount;
+              if (!matches) return a;
+              // Reverse only the IOU share (the other person's portion)
+              return { ...a, balance: a.balance + iou.amountLent };
+            }),
+          );
+        }
+        setTransactions((prevTx) =>
+          prevTx.filter((t) => t.id !== iou.linkedTransactionId),
+        );
+      }
+
+      setIOUs((prev) => prev.filter((i) => i.id !== iouId));
     },
-    [setIOUs],
+    [setIOUs, setTransactions, setAccounts],
   );
 
   // Bill callbacks
@@ -1559,6 +1631,7 @@ export function useFinanceData() {
     totalIOUsOwed,
     totalIOUsBorrowed,
     addIOU,
+    updateIOU,
     addBorrowedIOU,
     repayIOU,
     repayBorrowedIOU,

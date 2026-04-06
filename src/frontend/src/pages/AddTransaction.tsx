@@ -42,6 +42,7 @@ export function AddTransaction({
     incomeSourceChips,
     goals,
     addIOU,
+    updateTransaction,
   } = useFinanceData();
 
   const [amount, setAmount] = useState(initialAmount ?? "");
@@ -298,8 +299,8 @@ export function AddTransaction({
       const splitShare = Number.parseFloat(splitAmount);
       const yourShare = num - splitShare;
 
-      // Log expense only for your share
-      addTransaction({
+      // Log expense only for your share — capture the returned tx for cross-referencing
+      const splitTx = addTransaction({
         amount: yourShare,
         date,
         mainCategory: finalMainCategory,
@@ -319,17 +320,24 @@ export function AddTransaction({
         debitAccount(parentId, num);
       }
 
-      // Auto-create IOU (Lent) for the other person's share
-      addIOU(
+      // Auto-create IOU (Lent) for the other person's share — returns the new IOU
+      const newIOU = addIOU(
         {
           personName: splitPersonName.trim(),
           amountLent: splitShare,
           dateLent: date,
           dueDate: date,
           direction: "lent",
+          linkedTransactionId: splitTx?.id, // cross-reference set at creation time
         },
         undefined, // no additional account debit — already debited full amount above
       );
+
+      // Cross-reference: update transaction to point back to the IOU
+      if (splitTx?.id && newIOU?.id) {
+        updateTransaction(splitTx.id, { linkedIOUId: newIOU.id });
+        // No separate updateIOU needed — linkedTransactionId already set above
+      }
 
       toast.success(
         `Split recorded! You paid ₱${yourShare.toLocaleString()}, IOU for ₱${splitShare.toLocaleString()} created.`,

@@ -213,6 +213,11 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
     addSubAccount,
     editSubAccount,
     deleteSubAccount,
+    updateTransaction,
+    deleteTransaction,
+    updateIOU,
+    creditAccount,
+    debitAccount,
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
   const pAmt = (val: number) =>
@@ -388,6 +393,33 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
   const [expandedIOUHistory, setExpandedIOUHistory] = useState<Set<string>>(
     new Set(),
   );
+
+  // IOU Edit state
+  const [editIOUData, setEditIOUData] = useState<IOU | null>(null);
+  const [editIOUPersonName, setEditIOUPersonName] = useState("");
+  const [editIOUAmount, setEditIOUAmount] = useState("");
+  const [editIOUDueDate, setEditIOUDueDate] = useState("");
+  const [editIOUTotalBillChanged, setEditIOUTotalBillChanged] = useState<
+    boolean | null
+  >(null);
+  const [editIOUNewTotal, setEditIOUNewTotal] = useState("");
+
+  // Account history edit/delete state
+  const [accountEditTx, setAccountEditTx] = useState<{
+    id: string;
+    amount: string;
+    date: string;
+    type: string;
+    mainCategory: string;
+    subCategory: string;
+    description: string;
+    account: string;
+  } | null>(null);
+  const [accountDeleteId, setAccountDeleteId] = useState<string | null>(null);
+  const [acctSplitTotalBillChanged, setAcctSplitTotalBillChanged] = useState<
+    boolean | null
+  >(null);
+  const [acctSplitNewTotal, setAcctSplitNewTotal] = useState("");
 
   const ccAlerts = getCCAlerts();
 
@@ -1845,19 +1877,56 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                                 tx.subCategory ||
                                 tx.mainCategory}
                             </p>
-                            <span
-                              className="text-sm font-bold ml-2 flex-shrink-0"
-                              style={{
-                                color: isIncome
-                                  ? "#20D18A"
-                                  : isTransfer
-                                    ? "oklch(var(--muted-foreground))"
-                                    : "#EB5757",
-                              }}
-                            >
-                              {isIncome ? "+" : isExpense ? "-" : ""}
-                              {pAmt(tx.amount)}
-                            </span>
+                            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                              <span
+                                className="text-sm font-bold"
+                                style={{
+                                  color: isIncome
+                                    ? "#20D18A"
+                                    : isTransfer
+                                      ? "oklch(var(--muted-foreground))"
+                                      : "#EB5757",
+                                }}
+                              >
+                                {isIncome ? "+" : isExpense ? "-" : ""}
+                                {pAmt(tx.amount)}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setAccountEditTx({
+                                    id: tx.id,
+                                    amount: tx.amount.toString(),
+                                    date: tx.date,
+                                    type: tx.type,
+                                    mainCategory: tx.mainCategory,
+                                    subCategory: tx.subCategory,
+                                    description: tx.description,
+                                    account: tx.account ?? "",
+                                  })
+                                }
+                                className="p-1 rounded-lg"
+                                style={{
+                                  backgroundColor: "oklch(var(--secondary))",
+                                  color: "oklch(var(--foreground))",
+                                }}
+                                data-ocid={`accounts.history.edit_button.${i + 1}`}
+                              >
+                                <Pencil size={10} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAccountDeleteId(tx.id)}
+                                className="p-1 rounded-lg"
+                                style={{
+                                  backgroundColor: "#EB575722",
+                                  color: "#EB5757",
+                                }}
+                                data-ocid={`accounts.history.delete_button.${i + 1}`}
+                              >
+                                <Trash2 size={10} />
+                              </button>
+                            </div>
                           </div>
                           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                             <span className="text-[10px] text-muted-foreground">
@@ -1918,6 +1987,315 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               data-ocid="accounts.history.close_button"
             >
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Account History — Edit Transaction Dialog */}
+      <Dialog
+        open={!!accountEditTx}
+        onOpenChange={(o) => {
+          if (!o) {
+            setAccountEditTx(null);
+            setAcctSplitTotalBillChanged(null);
+            setAcctSplitNewTotal("");
+          }
+        }}
+      >
+        <DialogContent data-ocid="accounts.history.edit.dialog">
+          <DialogHeader>
+            <DialogTitle>Edit Transaction</DialogTitle>
+          </DialogHeader>
+          {accountEditTx && (
+            <div className="space-y-3">
+              <div>
+                <Label>Amount</Label>
+                <input
+                  type="number"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "oklch(var(--border))" }}
+                  value={accountEditTx.amount}
+                  onChange={(e) => {
+                    setAccountEditTx((prev) =>
+                      prev ? { ...prev, amount: e.target.value } : null,
+                    );
+                    setAcctSplitTotalBillChanged(null);
+                    setAcctSplitNewTotal("");
+                  }}
+                  data-ocid="accounts.history.edit.amount.input"
+                />
+              </div>
+              <div>
+                <Label>Date</Label>
+                <input
+                  type="date"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "oklch(var(--border))" }}
+                  value={accountEditTx.date}
+                  onChange={(e) =>
+                    setAccountEditTx((prev) =>
+                      prev ? { ...prev, date: e.target.value } : null,
+                    )
+                  }
+                  data-ocid="accounts.history.edit.date.input"
+                />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "oklch(var(--border))" }}
+                  value={accountEditTx.description}
+                  onChange={(e) =>
+                    setAccountEditTx((prev) =>
+                      prev ? { ...prev, description: e.target.value } : null,
+                    )
+                  }
+                  data-ocid="accounts.history.edit.description.input"
+                />
+              </div>
+              {/* Split expense total change prompt */}
+              {(() => {
+                const origTx = allAccountTransactions.find(
+                  (tx) => tx.id === accountEditTx.id,
+                );
+                const linkedIOU = origTx?.linkedIOUId
+                  ? ious.find((iou) => iou.id === origTx.linkedIOUId)
+                  : null;
+                const amountChanged =
+                  Number(accountEditTx.amount) !== Number(origTx?.amount);
+                if (!linkedIOU || !amountChanged || !origTx) return null;
+                const originalTotal =
+                  linkedIOU.amountLent + Number(origTx.amount);
+                return (
+                  <div
+                    className="rounded-xl p-3 space-y-2"
+                    style={{ backgroundColor: "oklch(var(--secondary))" }}
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      Did the total bill amount change?
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Original total: ₱{originalTotal.toLocaleString()} (your
+                      share ₱{Number(origTx.amount).toLocaleString()} + their
+                      share ₱{linkedIOU.amountLent.toLocaleString()})
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        style={{
+                          backgroundColor:
+                            acctSplitTotalBillChanged === true
+                              ? "oklch(var(--primary))"
+                              : "oklch(var(--secondary) / 0.8)",
+                          color:
+                            acctSplitTotalBillChanged === true
+                              ? "oklch(var(--primary-foreground))"
+                              : "oklch(var(--foreground))",
+                          border: "1px solid oklch(var(--border))",
+                        }}
+                        onClick={() => setAcctSplitTotalBillChanged(true)}
+                        data-ocid="accounts.history.edit.split_total_changed.button"
+                      >
+                        Yes, total changed
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        style={{
+                          backgroundColor:
+                            acctSplitTotalBillChanged === false
+                              ? "oklch(var(--primary))"
+                              : "oklch(var(--secondary) / 0.8)",
+                          color:
+                            acctSplitTotalBillChanged === false
+                              ? "oklch(var(--primary-foreground))"
+                              : "oklch(var(--foreground))",
+                          border: "1px solid oklch(var(--border))",
+                        }}
+                        onClick={() => setAcctSplitTotalBillChanged(false)}
+                        data-ocid="accounts.history.edit.split_same_total.button"
+                      >
+                        No, same total
+                      </button>
+                    </div>
+                    {acctSplitTotalBillChanged === true && (
+                      <div>
+                        <Label>New Total Bill Amount</Label>
+                        <input
+                          type="number"
+                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                          style={{ borderColor: "oklch(var(--border))" }}
+                          placeholder="Enter new total"
+                          value={acctSplitNewTotal}
+                          onChange={(e) => setAcctSplitNewTotal(e.target.value)}
+                          data-ocid="accounts.history.edit.split_new_total.input"
+                        />
+                        {acctSplitNewTotal && Number(acctSplitNewTotal) > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Their share will be: ₱
+                            {(
+                              Number(acctSplitNewTotal) -
+                              Number(accountEditTx.amount)
+                            ).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {acctSplitTotalBillChanged === false && (
+                      <p className="text-xs text-muted-foreground">
+                        Their share will adjust to: ₱
+                        {(
+                          originalTotal - Number(accountEditTx.amount)
+                        ).toLocaleString()}{" "}
+                        (total ₱{originalTotal.toLocaleString()} stays the same)
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAccountEditTx(null);
+                setAcctSplitTotalBillChanged(null);
+                setAcctSplitNewTotal("");
+              }}
+              data-ocid="accounts.history.edit.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!accountEditTx) return;
+                const num = Number(accountEditTx.amount);
+                if (!num || num <= 0) {
+                  toast.error("Amount must be positive");
+                  return;
+                }
+                // Find the original transaction to reverse balance
+                const origTx = allAccountTransactions.find(
+                  (t) => t.id === accountEditTx.id,
+                );
+                // Split IOU check — must confirm before saving if amount changed
+                if (origTx?.linkedIOUId) {
+                  const linkedIOU = ious.find(
+                    (iou) => iou.id === origTx.linkedIOUId,
+                  );
+                  if (linkedIOU && num !== Number(origTx.amount)) {
+                    if (acctSplitTotalBillChanged === null) {
+                      toast.error(
+                        "Please confirm whether the total bill changed",
+                      );
+                      return;
+                    }
+                    if (acctSplitTotalBillChanged === true) {
+                      const newTotal = Number(acctSplitNewTotal);
+                      if (!newTotal || newTotal <= 0) {
+                        toast.error("Please enter the new total amount");
+                        return;
+                      }
+                      const newIouAmount = newTotal - num;
+                      if (newIouAmount <= 0) {
+                        toast.error("Their share cannot be zero or negative");
+                        return;
+                      }
+                      updateIOU(origTx.linkedIOUId, {
+                        amountLent: newIouAmount,
+                      });
+                    } else {
+                      const originalTotal =
+                        linkedIOU.amountLent + Number(origTx.amount);
+                      const newIouAmount = originalTotal - num;
+                      if (newIouAmount <= 0) {
+                        toast.error("Their share cannot be zero or negative");
+                        return;
+                      }
+                      updateIOU(origTx.linkedIOUId, {
+                        amountLent: newIouAmount,
+                      });
+                    }
+                  }
+                }
+                if (origTx?.account) {
+                  const origAcc = accounts.find(
+                    (a) => a.name === origTx.account,
+                  );
+                  if (origAcc) {
+                    if (origTx.type === "expense") {
+                      creditAccount(origAcc.id, origTx.amount);
+                    } else if (origTx.type === "income") {
+                      debitAccount(origAcc.id, origTx.amount);
+                    }
+                  }
+                }
+                // Apply new balance effect
+                const accName = accountEditTx.account || origTx?.account;
+                if (accName) {
+                  const newAcc = accounts.find((a) => a.name === accName);
+                  if (newAcc) {
+                    if (accountEditTx.type === "expense") {
+                      debitAccount(newAcc.id, num);
+                    } else if (accountEditTx.type === "income") {
+                      creditAccount(newAcc.id, num);
+                    }
+                  }
+                }
+                updateTransaction(accountEditTx.id, {
+                  amount: num,
+                  date: accountEditTx.date,
+                  description: accountEditTx.description,
+                });
+                toast.success("Transaction updated");
+                setAccountEditTx(null);
+                setAcctSplitTotalBillChanged(null);
+                setAcctSplitNewTotal("");
+              }}
+              data-ocid="accounts.history.edit.save_button"
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Account History — Delete Transaction Dialog */}
+      <Dialog
+        open={!!accountDeleteId}
+        onOpenChange={(o) => !o && setAccountDeleteId(null)}
+      >
+        <DialogContent data-ocid="accounts.history.delete.dialog">
+          <DialogHeader>
+            <DialogTitle>Delete Transaction</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Are you sure? This cannot be undone.
+          </p>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAccountDeleteId(null)}
+              data-ocid="accounts.history.delete.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!accountDeleteId) return;
+                deleteTransaction(accountDeleteId);
+                setAccountDeleteId(null);
+                toast.success("Transaction deleted");
+              }}
+              style={{ backgroundColor: "#EB5757", color: "#fff" }}
+              data-ocid="accounts.history.delete.confirm_button"
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2127,7 +2505,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                     {subTxs.map((tx, i) => (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-xl"
+                        className="flex items-center gap-2 p-3 rounded-xl"
                         style={{ backgroundColor: "oklch(var(--secondary))" }}
                         data-ocid={`accounts.sub_account_history.item.${i + 1}`}
                       >
@@ -2140,18 +2518,55 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                             {tx.mainCategory}
                           </p>
                         </div>
-                        <span
-                          className="text-sm font-bold ml-2 flex-shrink-0"
-                          style={{
-                            color:
-                              tx.type === "income"
-                                ? "oklch(var(--primary))"
-                                : "#EB5757",
-                          }}
-                        >
-                          {tx.type === "income" ? "+" : "-"}
-                          {pAmt(tx.amount)}
-                        </span>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <span
+                            className="text-sm font-bold"
+                            style={{
+                              color:
+                                tx.type === "income"
+                                  ? "oklch(var(--primary))"
+                                  : "#EB5757",
+                            }}
+                          >
+                            {tx.type === "income" ? "+" : "-"}
+                            {pAmt(tx.amount)}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setAccountEditTx({
+                                id: tx.id,
+                                amount: tx.amount.toString(),
+                                date: tx.date,
+                                type: tx.type,
+                                mainCategory: tx.mainCategory,
+                                subCategory: tx.subCategory,
+                                description: tx.description,
+                                account: tx.account ?? "",
+                              })
+                            }
+                            className="p-1 rounded-lg"
+                            style={{
+                              backgroundColor: "oklch(var(--card))",
+                              color: "oklch(var(--foreground))",
+                            }}
+                            data-ocid={`accounts.sub_account_history.edit_button.${i + 1}`}
+                          >
+                            <Pencil size={10} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAccountDeleteId(tx.id)}
+                            className="p-1 rounded-lg"
+                            style={{
+                              backgroundColor: "#EB575722",
+                              color: "#EB5757",
+                            }}
+                            data-ocid={`accounts.sub_account_history.delete_button.${i + 1}`}
+                          >
+                            <Trash2 size={10} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -3117,6 +3532,260 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         </DialogContent>
       </Dialog>
 
+      {/* Edit IOU Dialog */}
+      <Dialog
+        open={!!editIOUData}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditIOUData(null);
+            setEditIOUTotalBillChanged(null);
+            setEditIOUNewTotal("");
+          }
+        }}
+      >
+        <DialogContent
+          className="max-h-[90vh] overflow-y-auto"
+          data-ocid="accounts.iou.edit.dialog"
+        >
+          <DialogHeader>
+            <DialogTitle>Edit IOU</DialogTitle>
+          </DialogHeader>
+          {editIOUData && (
+            <div className="space-y-4">
+              <div>
+                <Label>Person Name</Label>
+                <input
+                  type="text"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "oklch(var(--border))" }}
+                  value={editIOUPersonName}
+                  onChange={(e) => setEditIOUPersonName(e.target.value)}
+                  data-ocid="accounts.iou.edit.input"
+                />
+              </div>
+              <div>
+                <Label>Amount Owed</Label>
+                <input
+                  type="number"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "oklch(var(--border))" }}
+                  value={editIOUAmount}
+                  onChange={(e) => {
+                    setEditIOUAmount(e.target.value);
+                    setEditIOUTotalBillChanged(null);
+                    setEditIOUNewTotal("");
+                  }}
+                  data-ocid="accounts.iou.edit.amount.input"
+                />
+              </div>
+              <div>
+                <Label>Due Date</Label>
+                <input
+                  type="date"
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                  style={{ borderColor: "oklch(var(--border))" }}
+                  value={editIOUDueDate}
+                  onChange={(e) => setEditIOUDueDate(e.target.value)}
+                  data-ocid="accounts.iou.edit.due_date.input"
+                />
+              </div>
+
+              {/* Show total bill change prompt if this IOU has a linked transaction and amount changed */}
+              {editIOUData.linkedTransactionId &&
+                editIOUAmount &&
+                Number(editIOUAmount) !== editIOUData.amountLent && (
+                  <div
+                    className="rounded-xl p-3 space-y-2"
+                    style={{ backgroundColor: "oklch(var(--secondary))" }}
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      Did the total bill amount change?
+                    </p>
+                    {(() => {
+                      const linkedTx = transactions.find(
+                        (t) => t.id === editIOUData.linkedTransactionId,
+                      );
+                      const originalTotal =
+                        editIOUData.amountLent + (linkedTx?.amount ?? 0);
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Original total: ₱{originalTotal.toLocaleString()}{" "}
+                          (your share ₱
+                          {linkedTx?.amount?.toLocaleString() ?? "?"} + their
+                          share ₱{editIOUData.amountLent.toLocaleString()})
+                        </p>
+                      );
+                    })()}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        style={{
+                          backgroundColor:
+                            editIOUTotalBillChanged === true
+                              ? "oklch(var(--primary))"
+                              : "oklch(var(--secondary) / 0.8)",
+                          color:
+                            editIOUTotalBillChanged === true
+                              ? "oklch(var(--primary-foreground))"
+                              : "oklch(var(--foreground))",
+                          border: "1px solid oklch(var(--border))",
+                        }}
+                        onClick={() => setEditIOUTotalBillChanged(true)}
+                        data-ocid="accounts.iou.edit.total_changed.toggle"
+                      >
+                        Yes, total changed
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        style={{
+                          backgroundColor:
+                            editIOUTotalBillChanged === false
+                              ? "oklch(var(--primary))"
+                              : "oklch(var(--secondary) / 0.8)",
+                          color:
+                            editIOUTotalBillChanged === false
+                              ? "oklch(var(--primary-foreground))"
+                              : "oklch(var(--foreground))",
+                          border: "1px solid oklch(var(--border))",
+                        }}
+                        onClick={() => setEditIOUTotalBillChanged(false)}
+                        data-ocid="accounts.iou.edit.total_unchanged.toggle"
+                      >
+                        No, same total
+                      </button>
+                    </div>
+                    {editIOUTotalBillChanged === true && (
+                      <div>
+                        <Label>New Total Bill Amount</Label>
+                        <input
+                          type="number"
+                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                          style={{ borderColor: "oklch(var(--border))" }}
+                          placeholder="Enter new total"
+                          value={editIOUNewTotal}
+                          onChange={(e) => setEditIOUNewTotal(e.target.value)}
+                          data-ocid="accounts.iou.edit.new_total.input"
+                        />
+                        {editIOUNewTotal && Number(editIOUNewTotal) > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Your share will be ₱
+                            {(
+                              Number(editIOUNewTotal) - Number(editIOUAmount)
+                            ).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {editIOUTotalBillChanged === false &&
+                      (() => {
+                        const linkedTx = transactions.find(
+                          (t) => t.id === editIOUData.linkedTransactionId,
+                        );
+                        const originalTotal =
+                          editIOUData.amountLent + (linkedTx?.amount ?? 0);
+                        const newMyShare =
+                          originalTotal - Number(editIOUAmount);
+                        return (
+                          <p className="text-xs text-muted-foreground">
+                            Your share will adjust to ₱
+                            {newMyShare.toLocaleString()} (total ₱
+                            {originalTotal.toLocaleString()} stays the same)
+                          </p>
+                        );
+                      })()}
+                  </div>
+                )}
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditIOUData(null);
+                setEditIOUTotalBillChanged(null);
+                setEditIOUNewTotal("");
+              }}
+              data-ocid="accounts.iou.edit.cancel_button"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!editIOUData) return;
+                const newAmount = Number(editIOUAmount);
+                if (!editIOUPersonName.trim() || !newAmount || newAmount <= 0) {
+                  toast.error("Please fill in all required fields");
+                  return;
+                }
+                const amountChanged = newAmount !== editIOUData.amountLent;
+                const linkedTx = editIOUData.linkedTransactionId
+                  ? transactions.find(
+                      (t) => t.id === editIOUData.linkedTransactionId,
+                    )
+                  : null;
+
+                if (amountChanged && linkedTx) {
+                  // Need to decide if total changed
+                  if (editIOUTotalBillChanged === null) {
+                    toast.error(
+                      "Please confirm whether the total bill changed",
+                    );
+                    return;
+                  }
+                  const originalTotal =
+                    editIOUData.amountLent + linkedTx.amount;
+                  let newMyShare: number;
+                  if (editIOUTotalBillChanged === true) {
+                    const newTotal = Number(editIOUNewTotal);
+                    if (!newTotal || newTotal <= 0) {
+                      toast.error("Please enter the new total amount");
+                      return;
+                    }
+                    newMyShare = newTotal - newAmount;
+                    if (newMyShare <= 0) {
+                      toast.error("Your share must be greater than 0");
+                      return;
+                    }
+                  } else {
+                    // Total unchanged — adjust your share
+                    newMyShare = originalTotal - newAmount;
+                    if (newMyShare <= 0) {
+                      toast.error(
+                        "Their share cannot exceed the total. Adjust the amount.",
+                      );
+                      return;
+                    }
+                  }
+                  // Update linked transaction amount (reverse old balance, apply new)
+                  const acc = accounts.find((a) => a.name === linkedTx.account);
+                  if (acc) {
+                    creditAccount(acc.id, linkedTx.amount); // reverse old debit
+                    debitAccount(acc.id, newMyShare); // apply new debit
+                  }
+                  updateTransaction(linkedTx.id, { amount: newMyShare });
+                }
+
+                // Update the IOU
+                updateIOU(editIOUData.id, {
+                  personName: editIOUPersonName.trim(),
+                  amountLent: newAmount,
+                  dueDate: editIOUDueDate || editIOUData.dueDate,
+                });
+                toast.success("IOU updated");
+                setEditIOUData(null);
+                setEditIOUTotalBillChanged(null);
+                setEditIOUNewTotal("");
+              }}
+              data-ocid="accounts.iou.edit.save_button"
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete IOU Dialog */}
       <Dialog
         open={!!deleteIOUId}
@@ -3218,15 +3887,36 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={() => setDeleteIOUId(iou.id)}
-            className="p-1.5 rounded-lg flex-shrink-0"
-            style={{ backgroundColor: "#EB575722", color: "#EB5757" }}
-            data-ocid={`accounts.iou.${prefix}.delete_button.${idx + 1}`}
-          >
-            <Trash2 size={11} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setEditIOUData(iou);
+                setEditIOUPersonName(iou.personName);
+                setEditIOUAmount(iou.amountLent.toString());
+                setEditIOUDueDate(iou.dueDate ?? "");
+                setEditIOUTotalBillChanged(null);
+                setEditIOUNewTotal("");
+              }}
+              className="p-1.5 rounded-lg flex-shrink-0"
+              style={{
+                backgroundColor: "oklch(var(--secondary))",
+                color: "oklch(var(--foreground))",
+              }}
+              data-ocid={`accounts.iou.${prefix}.edit_button.${idx + 1}`}
+            >
+              <Pencil size={11} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeleteIOUId(iou.id)}
+              className="p-1.5 rounded-lg flex-shrink-0"
+              style={{ backgroundColor: "#EB575722", color: "#EB5757" }}
+              data-ocid={`accounts.iou.${prefix}.delete_button.${idx + 1}`}
+            >
+              <Trash2 size={11} />
+            </button>
+          </div>
         </div>
 
         {/* Details */}

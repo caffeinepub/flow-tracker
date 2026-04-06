@@ -58,6 +58,8 @@ export function History({
     getMainCatForSub,
     creditAccount,
     debitAccount,
+    ious,
+    updateIOU,
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
   const pAmt = (val: number) =>
@@ -72,6 +74,11 @@ export function History({
   // Dialog states
   const [editTx, setEditTx] = useState<EditState | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // Split expense total-change prompt state
+  const [splitTotalBillChanged, setSplitTotalBillChanged] = useState<
+    boolean | null
+  >(null);
+  const [splitNewTotal, setSplitNewTotal] = useState("");
 
   // Resolve which transactions to show based on period filter
   const filteredByPeriod = (() => {
@@ -137,6 +144,8 @@ export function History({
   };
 
   const openEdit = (tx: Transaction) => {
+    setSplitTotalBillChanged(null);
+    setSplitNewTotal("");
     setEditTx({
       id: tx.id,
       amount: tx.amount.toString(),
@@ -196,7 +205,45 @@ export function History({
       description: editTx.description,
       account: editTx.account || undefined,
     });
+
+    // If this was a split expense, update the linked IOU amount
+    const origTxForIOU = transactions.find((tx) => tx.id === editTx.id);
+    if (origTxForIOU?.linkedIOUId) {
+      const linkedIOU = ious.find((iou) => iou.id === origTxForIOU.linkedIOUId);
+      if (linkedIOU) {
+        const amountChanged = num !== Number(origTxForIOU.amount);
+        if (amountChanged) {
+          // Require user confirmation before changing the IOU
+          if (splitTotalBillChanged === null) {
+            toast.error("Please confirm whether the total bill changed");
+            return;
+          }
+          const originalTotal =
+            linkedIOU.amountLent + Number(origTxForIOU.amount);
+          let newIouAmount: number;
+          if (splitTotalBillChanged === true) {
+            const newTotal = Number(splitNewTotal);
+            if (!newTotal || newTotal <= 0) {
+              toast.error("Please enter the new total amount");
+              return;
+            }
+            newIouAmount = newTotal - num;
+          } else {
+            // Same total — IOU absorbs the difference
+            newIouAmount = originalTotal - num;
+          }
+          if (newIouAmount <= 0) {
+            toast.error("Their share cannot be zero or negative");
+            return;
+          }
+          updateIOU(origTxForIOU.linkedIOUId, { amountLent: newIouAmount });
+        }
+      }
+    }
+
     toast.success("Transaction updated");
+    setSplitTotalBillChanged(null);
+    setSplitNewTotal("");
     setEditTx(null);
   };
 
@@ -602,7 +649,16 @@ export function History({
           </div>
         </TabsContent>
       </Tabs>
-      <Dialog open={!!editTx} onOpenChange={(o) => !o && setEditTx(null)}>
+      <Dialog
+        open={!!editTx}
+        onOpenChange={(o) => {
+          if (!o) {
+            setSplitTotalBillChanged(null);
+            setSplitNewTotal("");
+            setEditTx(null);
+          }
+        }}
+      >
         <DialogContent
           className="max-h-[90vh] overflow-y-auto"
           data-ocid="history.edit.dialog"
@@ -799,12 +855,115 @@ export function History({
                   ))}
                 </div>
               </div>
+
+              {/* Split expense total change prompt */}
+              {(() => {
+                const origTx = transactions.find((tx) => tx.id === editTx?.id);
+                const linkedIOU = origTx?.linkedIOUId
+                  ? ious.find((iou) => iou.id === origTx.linkedIOUId)
+                  : null;
+                const amountChanged =
+                  editTx && Number(editTx.amount) !== origTx?.amount;
+                if (!linkedIOU || !amountChanged || !origTx) return null;
+                const originalTotal =
+                  linkedIOU.amountLent + Number(origTx.amount);
+                return (
+                  <div
+                    className="rounded-xl p-3 space-y-2"
+                    style={{ backgroundColor: "oklch(var(--secondary))" }}
+                  >
+                    <p className="text-sm font-medium text-foreground">
+                      Did the total bill amount change?
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Original total: ₱{originalTotal.toLocaleString()} (your
+                      share ₱{origTx.amount.toLocaleString()} + their share ₱
+                      {linkedIOU.amountLent.toLocaleString()})
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        style={{
+                          backgroundColor:
+                            splitTotalBillChanged === true
+                              ? "oklch(var(--primary))"
+                              : "oklch(var(--secondary) / 0.8)",
+                          color:
+                            splitTotalBillChanged === true
+                              ? "oklch(var(--primary-foreground))"
+                              : "oklch(var(--foreground))",
+                          border: "1px solid oklch(var(--border))",
+                        }}
+                        onClick={() => setSplitTotalBillChanged(true)}
+                        data-ocid="history.edit.split_total_changed.button"
+                      >
+                        Yes, total changed
+                      </button>
+                      <button
+                        type="button"
+                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        style={{
+                          backgroundColor:
+                            splitTotalBillChanged === false
+                              ? "oklch(var(--primary))"
+                              : "oklch(var(--secondary) / 0.8)",
+                          color:
+                            splitTotalBillChanged === false
+                              ? "oklch(var(--primary-foreground))"
+                              : "oklch(var(--foreground))",
+                          border: "1px solid oklch(var(--border))",
+                        }}
+                        onClick={() => setSplitTotalBillChanged(false)}
+                        data-ocid="history.edit.split_same_total.button"
+                      >
+                        No, same total
+                      </button>
+                    </div>
+                    {splitTotalBillChanged === true && (
+                      <div>
+                        <Label>New Total Bill Amount</Label>
+                        <input
+                          type="number"
+                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
+                          style={{ borderColor: "oklch(var(--border))" }}
+                          placeholder="Enter new total"
+                          value={splitNewTotal}
+                          onChange={(e) => setSplitNewTotal(e.target.value)}
+                          data-ocid="history.edit.split_new_total.input"
+                        />
+                        {splitNewTotal && Number(splitNewTotal) > 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Their share will be: ₱
+                            {(
+                              Number(splitNewTotal) - Number(editTx.amount)
+                            ).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {splitTotalBillChanged === false && (
+                      <p className="text-xs text-muted-foreground">
+                        Their share will adjust to: ₱
+                        {(
+                          originalTotal - Number(editTx.amount)
+                        ).toLocaleString()}{" "}
+                        (total ₱{originalTotal.toLocaleString()} stays the same)
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
           <DialogFooter className="gap-2">
             <Button
               variant="outline"
-              onClick={() => setEditTx(null)}
+              onClick={() => {
+                setSplitTotalBillChanged(null);
+                setSplitNewTotal("");
+                setEditTx(null);
+              }}
               data-ocid="history.edit.cancel_button"
             >
               Cancel

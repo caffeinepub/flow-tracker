@@ -168,11 +168,11 @@ function parseMerchant(text: string): string {
 
   // Filter lines that are meaningful (not pure numbers/symbols/whitespace, min 3 chars)
   const isAddressOrPhone = (l: string) =>
-    /^\d[\d\s\-().+#,]+$/.test(l) || // phone / number
-    /^(tel|fax|phone|mobile|email|www|http)/i.test(l) || // contact info
-    /(st\.|ave\.|blvd\.|road|street|floor|bldg|building|unit|lot|block)/i.test(
+    /^\+?\d[\d\s\-().]+$/.test(l) || // purely numeric/phone line
+    /^(tel|fax|phone|mobile|email|www\.|http)/i.test(l) || // contact info prefix
+    /^\d+\s+(st\.|ave\.|blvd\.|road|street|floor|bldg|building|unit|lot|block)/i.test(
       l,
-    ); // address
+    ); // number + street keyword
 
   const meaningfulLines = lines.filter(
     (l) =>

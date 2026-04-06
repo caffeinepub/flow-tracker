@@ -218,12 +218,22 @@ export function Reports() {
   const ytdData = useMemo(() => {
     const txs = durationTxs;
     const incomeTotal = txs
-      .filter((t) => t.type === "income" && t.mainCategory !== "Transfer")
+      .filter(
+        (t) =>
+          t.type === "income" &&
+          t.mainCategory !== "Transfer" &&
+          !t.isOpeningBalance,
+      )
       .reduce((s, t) => s + t.amount, 0);
 
     // Income breakdown by source chip
     const incomeBySource = txs
-      .filter((t) => t.type === "income" && t.mainCategory !== "Transfer")
+      .filter(
+        (t) =>
+          t.type === "income" &&
+          t.mainCategory !== "Transfer" &&
+          !t.isOpeningBalance,
+      )
       .reduce(
         (acc, t) => {
           const key = t.subCategory || "Other";

@@ -19,16 +19,21 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CalendarDays,
+  CheckCircle,
   ChevronDown,
   ChevronUp,
   Database,
   Download,
+  HelpCircle,
+  Loader2,
   Moon,
   Plus,
   RefreshCw,
   RotateCcw,
+  Smartphone,
   Sun,
   Trash2,
   Upload,
@@ -114,11 +119,18 @@ export function Settings() {
 
   // Next Period Draft form state
   const [showNextPeriodForm, setShowNextPeriodForm] = useState(false);
+  const [nextPeriodStep, setNextPeriodStep] = useState<1 | 2>(1);
   const [nextPeriodForm, setNextPeriodForm] = useState({
     startDate: "",
     endDate: "",
     expectedIncome: "",
   });
+  const [nextPeriodCats, setNextPeriodCats] = useState<CustomCategory[]>([]);
+
+  // App update state
+  const [updateStatus, setUpdateStatus] = useState<
+    "idle" | "checking" | "available" | "upToDate"
+  >("idle");
 
   // Period Mode confirmation dialog
   const [showModeSwitch, setShowModeSwitch] = useState<
@@ -496,6 +508,35 @@ export function Settings() {
   };
 
   const isDark = config?.theme !== "light";
+
+  // App update functions
+  const checkForUpdate = async () => {
+    setUpdateStatus("checking");
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await reg.update();
+        if (reg.waiting) {
+          setUpdateStatus("available");
+        } else {
+          setUpdateStatus("upToDate");
+          setTimeout(() => setUpdateStatus("idle"), 3000);
+        }
+      } else {
+        setUpdateStatus("upToDate");
+        setTimeout(() => setUpdateStatus("idle"), 3000);
+      }
+    }
+  };
+
+  const applyUpdate = () => {
+    navigator.serviceWorker.getRegistration().then((reg) => {
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+        window.location.reload();
+      }
+    });
+  };
 
   return (
     <div className="pb-24 px-4 pt-2 fade-in">
@@ -1354,102 +1395,236 @@ export function Settings() {
                 className="p-3 rounded-xl border border-border mb-3"
                 style={{ backgroundColor: "oklch(var(--secondary) / 0.5)" }}
               >
-                <p className="text-xs font-semibold text-foreground mb-2">
-                  Plan Next Period
-                </p>
-                <div className="space-y-2">
-                  <div>
-                    <Label className="text-xs">Start Date</Label>
-                    <Input
-                      type="date"
-                      value={nextPeriodForm.startDate}
-                      onChange={(e) =>
-                        setNextPeriodForm((p) => ({
-                          ...p,
-                          startDate: e.target.value,
-                        }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                      data-ocid="settings.next_period.start_date.input"
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    Plan Next Period — Step {nextPeriodStep} of 2
+                  </p>
+                  <div className="flex gap-1">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: "oklch(var(--primary))" }}
                     />
-                  </div>
-                  <div>
-                    <Label className="text-xs">End Date</Label>
-                    <Input
-                      type="date"
-                      value={nextPeriodForm.endDate}
-                      min={nextPeriodForm.startDate || undefined}
-                      onChange={(e) =>
-                        setNextPeriodForm((p) => ({
-                          ...p,
-                          endDate: e.target.value,
-                        }))
-                      }
-                      className="mt-1 h-8 text-sm"
-                      data-ocid="settings.next_period.end_date.input"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Expected Income</Label>
-                    <Input
-                      type="number"
-                      value={nextPeriodForm.expectedIncome}
-                      onChange={(e) =>
-                        setNextPeriodForm((p) => ({
-                          ...p,
-                          expectedIncome: e.target.value,
-                        }))
-                      }
-                      placeholder="e.g. 19000"
-                      className="mt-1 h-8 text-sm"
-                      data-ocid="settings.next_period.income.input"
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        backgroundColor:
+                          nextPeriodStep === 2
+                            ? "oklch(var(--primary))"
+                            : "oklch(var(--border))",
+                      }}
                     />
                   </div>
                 </div>
-                <div className="flex gap-2 mt-3">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => setShowNextPeriodForm(false)}
-                    data-ocid="settings.next_period.cancel_button"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="flex-1"
-                    onClick={() => {
-                      if (
-                        !nextPeriodForm.startDate ||
-                        !nextPeriodForm.endDate
-                      ) {
-                        toast.error("Start and end dates are required");
-                        return;
-                      }
-                      const income = Number.parseFloat(
-                        nextPeriodForm.expectedIncome,
+
+                {nextPeriodStep === 1 && (
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs">Start Date</Label>
+                      <Input
+                        type="date"
+                        value={nextPeriodForm.startDate}
+                        onChange={(e) =>
+                          setNextPeriodForm((p) => ({
+                            ...p,
+                            startDate: e.target.value,
+                          }))
+                        }
+                        className="mt-1 h-8 text-sm"
+                        data-ocid="settings.next_period.start_date.input"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">End Date</Label>
+                      <Input
+                        type="date"
+                        value={nextPeriodForm.endDate}
+                        min={nextPeriodForm.startDate || undefined}
+                        onChange={(e) =>
+                          setNextPeriodForm((p) => ({
+                            ...p,
+                            endDate: e.target.value,
+                          }))
+                        }
+                        className="mt-1 h-8 text-sm"
+                        data-ocid="settings.next_period.end_date.input"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Expected Income</Label>
+                      <Input
+                        type="number"
+                        value={nextPeriodForm.expectedIncome}
+                        onChange={(e) =>
+                          setNextPeriodForm((p) => ({
+                            ...p,
+                            expectedIncome: e.target.value,
+                          }))
+                        }
+                        placeholder="e.g. 19000"
+                        className="mt-1 h-8 text-sm"
+                        data-ocid="settings.next_period.income.input"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {nextPeriodStep === 2 && (
+                  <div className="space-y-2">
+                    <p className="text-[11px] text-muted-foreground mb-1">
+                      Set budget allocation for each category
+                    </p>
+                    {nextPeriodCats.map((cat, idx) => {
+                      const expectedInc =
+                        Number.parseFloat(nextPeriodForm.expectedIncome) || 0;
+                      const catPct = cat.pct;
+                      const pesoEquiv =
+                        expectedInc > 0
+                          ? Math.round((expectedInc * catPct) / 100)
+                          : 0;
+                      return (
+                        <div key={cat.id}>
+                          <div className="flex items-center justify-between mb-1">
+                            <Label className="text-xs">{cat.name}</Label>
+                            {expectedInc > 0 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                ₱{pesoEquiv.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={cat.pct}
+                              onChange={(e) => {
+                                const val =
+                                  Number.parseFloat(e.target.value) || 0;
+                                setNextPeriodCats((prev) =>
+                                  prev.map((c, i) =>
+                                    i === idx ? { ...c, pct: val } : c,
+                                  ),
+                                );
+                              }}
+                              className="h-8 text-sm flex-1"
+                              min="0"
+                              max="100"
+                              data-ocid="settings.next_period.cat_pct.input"
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              %
+                            </span>
+                          </div>
+                        </div>
                       );
-                      if (!income || income <= 0) {
-                        toast.error("Valid expected income is required");
-                        return;
-                      }
-                      saveNextPeriodDraft({
-                        startDate: nextPeriodForm.startDate,
-                        endDate: nextPeriodForm.endDate,
-                        expectedIncome: income,
-                      });
-                      setShowNextPeriodForm(false);
-                      toast.success("Next period draft saved!");
-                    }}
-                    style={{
-                      backgroundColor: "oklch(var(--primary))",
-                      color: "oklch(var(--primary-foreground))",
-                    }}
-                    data-ocid="settings.next_period.save_button"
-                  >
-                    Save Draft
-                  </Button>
+                    })}
+                    {(() => {
+                      const total = nextPeriodCats.reduce(
+                        (s, c) => s + c.pct,
+                        0,
+                      );
+                      return (
+                        <div className="flex items-center justify-between pt-1 border-t border-border">
+                          <span className="text-xs text-muted-foreground">
+                            Total
+                          </span>
+                          <span
+                            className="text-xs font-bold"
+                            style={{
+                              color:
+                                Math.abs(total - 100) < 0.5
+                                  ? "oklch(var(--primary))"
+                                  : "#EB5757",
+                            }}
+                          >
+                            {total.toFixed(0)}%
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-3">
+                  {nextPeriodStep === 1 ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setShowNextPeriodForm(false)}
+                        data-ocid="settings.next_period.cancel_button"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          if (
+                            !nextPeriodForm.startDate ||
+                            !nextPeriodForm.endDate
+                          ) {
+                            toast.error("Start and end dates are required");
+                            return;
+                          }
+                          const income = Number.parseFloat(
+                            nextPeriodForm.expectedIncome,
+                          );
+                          if (!income || income <= 0) {
+                            toast.error("Valid expected income is required");
+                            return;
+                          }
+                          setNextPeriodCats(
+                            customCategories.map((c) => ({ ...c })),
+                          );
+                          setNextPeriodStep(2);
+                        }}
+                        style={{
+                          backgroundColor: "oklch(var(--primary))",
+                          color: "oklch(var(--primary-foreground))",
+                        }}
+                        data-ocid="settings.next_period.next_button"
+                      >
+                        Next: Set Allocations
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => setNextPeriodStep(1)}
+                        data-ocid="settings.next_period.back_button"
+                      >
+                        Back
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => {
+                          const income = Number.parseFloat(
+                            nextPeriodForm.expectedIncome,
+                          );
+                          saveNextPeriodDraft({
+                            startDate: nextPeriodForm.startDate,
+                            endDate: nextPeriodForm.endDate,
+                            expectedIncome: income,
+                            customCategories: nextPeriodCats,
+                          });
+                          setShowNextPeriodForm(false);
+                          setNextPeriodStep(1);
+                          toast.success("Next period draft saved!");
+                        }}
+                        style={{
+                          backgroundColor: "oklch(var(--primary))",
+                          color: "oklch(var(--primary-foreground))",
+                        }}
+                        data-ocid="settings.next_period.save_button"
+                      >
+                        Save Draft
+                      </Button>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -1574,6 +1749,442 @@ export function Settings() {
           </div>
         </div>
       )}
+
+      {/* App Version Section */}
+      <div
+        className="rounded-2xl border border-border p-4 mb-4"
+        style={{ backgroundColor: "oklch(var(--card))" }}
+        data-ocid="settings.app_version.section"
+      >
+        <h2 className="text-sm font-semibold text-muted-foreground mb-3">
+          App Version
+        </h2>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Version</span>
+            <span className="text-xs font-medium text-foreground">1.0.0</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">Last checked</span>
+            <span className="text-xs text-muted-foreground">
+              {new Date().toLocaleDateString()}
+            </span>
+          </div>
+          {updateStatus === "available" && (
+            <div
+              className="p-2 rounded-lg text-xs mb-2"
+              style={{
+                backgroundColor: "oklch(var(--primary) / 0.1)",
+                color: "oklch(var(--primary))",
+              }}
+              data-ocid="settings.update.available_state"
+            >
+              Update available! Tap below to install.
+            </div>
+          )}
+          {updateStatus === "upToDate" && (
+            <div
+              className="p-2 rounded-lg text-xs mb-2 flex items-center gap-1"
+              style={{
+                backgroundColor: "oklch(0.5 0.15 142 / 0.1)",
+                color: "oklch(0.5 0.15 142)",
+              }}
+              data-ocid="settings.update.up_to_date_state"
+            >
+              <CheckCircle size={12} />
+              You're up to date
+            </div>
+          )}
+          {updateStatus === "available" ? (
+            <Button
+              className="w-full gap-2"
+              onClick={applyUpdate}
+              style={{
+                backgroundColor: "oklch(var(--primary))",
+                color: "oklch(var(--primary-foreground))",
+              }}
+              data-ocid="settings.update.install_button"
+            >
+              Install Update
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={checkForUpdate}
+              disabled={updateStatus === "checking"}
+              data-ocid="settings.update.check_button"
+            >
+              {updateStatus === "checking" ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Checking...
+                </>
+              ) : (
+                <>Check for Updates</>
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Help & User Manual Section */}
+      <div
+        className="rounded-2xl border border-border p-4 mb-4"
+        style={{ backgroundColor: "oklch(var(--card))" }}
+        data-ocid="settings.help.section"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <HelpCircle size={14} className="text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-muted-foreground">
+            {config?.language === "tl"
+              ? "Tulong at Gabay"
+              : "Help & User Manual"}
+          </h2>
+        </div>
+
+        {/* Device Installation Guides */}
+        <Tabs defaultValue="android" className="mb-4">
+          <TabsList className="w-full">
+            <TabsTrigger value="android" className="flex-1 text-xs gap-1">
+              <Smartphone size={11} /> Android
+            </TabsTrigger>
+            <TabsTrigger value="iphone" className="flex-1 text-xs gap-1">
+              <Smartphone size={11} /> iPhone
+            </TabsTrigger>
+            <TabsTrigger value="desktop" className="flex-1 text-xs gap-1">
+              Desktop
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="android" className="mt-3 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano mag-install"
+                  : "How to Install"}
+              </p>
+              <ol className="text-xs text-muted-foreground space-y-1 list-none">
+                {(config?.language === "tl"
+                  ? [
+                      "Buksan ang link na ito sa Chrome sa inyong Android phone",
+                      "I-tap ang tatlong tuldok (⋮) sa kanang itaas",
+                      'I-tap ang "Add to Home Screen"',
+                      'I-tap ang "Add" para kumpirmahin',
+                      "Lalabas ang icon ng app sa inyong home screen",
+                    ]
+                  : [
+                      "Open this link in Chrome on your Android phone",
+                      "Tap the three-dot menu (⋮) in the top right",
+                      'Tap "Add to Home Screen"',
+                      'Tap "Add" to confirm',
+                      "The app icon will appear on your home screen",
+                    ]
+                ).map((step, i) => (
+                  <li key={step} className="flex gap-2">
+                    <span
+                      className="font-bold"
+                      style={{ color: "oklch(var(--primary))" }}
+                    >
+                      {i + 1}.
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano gamitin nang walang internet"
+                  : "How to Use Offline"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {config?.language === "tl"
+                  ? "Pagkatapos mag-install, buksan ang app isang beses habang may Wi-Fi. Pagkatapos noon, gumagana ito kahit walang internet."
+                  : "After installing, open the app once on Wi-Fi. After that, it works without internet."}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano mag-update"
+                  : "How to Update"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {config?.language === "tl"
+                  ? 'Pumunta sa Settings → App Version → i-tap ang "Check for Updates"'
+                  : 'Go to Settings → App Version → tap "Check for Updates"'}
+              </p>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="iphone" className="mt-3 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano mag-install"
+                  : "How to Install"}
+              </p>
+              <ol className="text-xs text-muted-foreground space-y-1 list-none">
+                {(config?.language === "tl"
+                  ? [
+                      "Buksan ang link na ito sa Safari (hindi Chrome)",
+                      "I-tap ang Share icon (□↑) sa ibaba",
+                      'Mag-scroll pababa at i-tap ang "Add to Home Screen"',
+                      'I-tap ang "Add" para kumpirmahin',
+                      "Lalabas ang icon ng app sa inyong home screen",
+                    ]
+                  : [
+                      "Open this link in Safari (not Chrome)",
+                      "Tap the Share icon (□↑) at the bottom",
+                      'Scroll down and tap "Add to Home Screen"',
+                      'Tap "Add" to confirm',
+                      "The app icon will appear on your home screen",
+                    ]
+                ).map((step, i) => (
+                  <li key={step} className="flex gap-2">
+                    <span
+                      className="font-bold"
+                      style={{ color: "oklch(var(--primary))" }}
+                    >
+                      {i + 1}.
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+              <div
+                className="mt-2 p-2 rounded-lg text-[11px]"
+                style={{
+                  backgroundColor: "oklch(0.6 0.15 50 / 0.15)",
+                  color: "oklch(0.5 0.15 50)",
+                }}
+              >
+                {config?.language === "tl"
+                  ? "Mahalaga: Gamitin ang Safari — ang Chrome sa iPhone ay hindi makapag-install ng PWA"
+                  : "Important: Must use Safari — Chrome on iPhone cannot install PWAs"}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano gamitin nang walang internet"
+                  : "How to Use Offline"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {config?.language === "tl"
+                  ? "Pagkatapos mag-install sa Safari, buksan ang app isang beses habang may Wi-Fi. Pagkatapos noon, gumagana ito kahit walang internet."
+                  : "After installing via Safari, open the app once on Wi-Fi. After that, it works without internet."}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano mag-update"
+                  : "How to Update"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {config?.language === "tl"
+                  ? 'Pumunta sa Settings → App Version → i-tap ang "Check for Updates"'
+                  : 'Go to Settings → App Version → tap "Check for Updates"'}
+              </p>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="desktop" className="mt-3 space-y-3">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano mag-install"
+                  : "How to Install"}
+              </p>
+              <ol className="text-xs text-muted-foreground space-y-1 list-none">
+                {(config?.language === "tl"
+                  ? [
+                      "Buksan ang link na ito sa Chrome sa inyong computer",
+                      'I-click ang install icon (⊕) sa address bar, o i-click ang tatlong tuldok → "Install Flow Tracker"',
+                      'I-click ang "Install" para kumpirmahin',
+                    ]
+                  : [
+                      "Open this link in Chrome on your computer",
+                      'Click the install icon (⊕) in the address bar, OR click the three-dot menu → "Install Flow Tracker"',
+                      'Click "Install" to confirm',
+                    ]
+                ).map((step, i) => (
+                  <li key={step} className="flex gap-2">
+                    <span
+                      className="font-bold"
+                      style={{ color: "oklch(var(--primary))" }}
+                    >
+                      {i + 1}.
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano gamitin nang walang internet"
+                  : "How to Use Offline"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {config?.language === "tl"
+                  ? "Pagkatapos mag-install, gumagana ang app kahit walang internet pagkatapos ng unang pag-load."
+                  : "After installing, the app works without internet after first load."}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1">
+                {config?.language === "tl"
+                  ? "Paano mag-update"
+                  : "How to Update"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {config?.language === "tl"
+                  ? 'Pumunta sa Settings → App Version → i-tap ang "Check for Updates"'
+                  : 'Go to Settings → App Version → tap "Check for Updates"'}
+              </p>
+            </div>
+          </TabsContent>
+        </Tabs>
+
+        {/* Key Features Reference */}
+        <div className="border-t border-border pt-3 mb-3">
+          <p className="text-xs font-semibold text-foreground mb-2">
+            {config?.language === "tl"
+              ? "Mga Pangunahing Tampok"
+              : "Key Features"}
+          </p>
+          <div className="space-y-1">
+            {[
+              {
+                name: "Dashboard",
+                desc:
+                  config?.language === "tl"
+                    ? "Pangkalahatang-ideya ng badyet, natitirang balanse, pag-unlad ng goal"
+                    : "Budget overview, remaining balance, goal progress",
+              },
+              {
+                name: "Accounts",
+                desc:
+                  config?.language === "tl"
+                    ? "Pamahalaan ang mga bank account, e-wallet, credit card, sub-account"
+                    : "Manage bank accounts, e-wallets, credit cards, sub-accounts",
+              },
+              {
+                name: "Add Transaction",
+                desc:
+                  config?.language === "tl"
+                    ? "I-log ang kita, gastos, transfer, save to goal"
+                    : "Log income, expenses, transfers, save to goal",
+              },
+              {
+                name: "Recurring",
+                desc:
+                  config?.language === "tl"
+                    ? "Mga awtomatikong transaksyon sa iskedyul"
+                    : "Automatic transactions on a schedule",
+              },
+              {
+                name: "Bill Tracker",
+                desc:
+                  config?.language === "tl"
+                    ? "Subaybayan ang mga bayarin na may due date at paid/unpaid na katayuan"
+                    : "Track bills with due dates and paid/unpaid status",
+              },
+              {
+                name: "IOU Tracker",
+                desc:
+                  config?.language === "tl"
+                    ? "Subaybayan ang perang pinagkautangan at inutang"
+                    : "Track money lent and borrowed",
+              },
+              {
+                name: "History",
+                desc:
+                  config?.language === "tl"
+                    ? "Kumpletong talaan ng transaksyon na may paghahanap, filter, at CSV export"
+                    : "Full transaction log with search, filter, and CSV export",
+              },
+              {
+                name: "Reports",
+                desc:
+                  config?.language === "tl"
+                    ? "Buodang year-to-date na may kategorya na breakdown"
+                    : "Year-to-date summaries with category breakdown",
+              },
+              {
+                name: "Projections",
+                desc:
+                  config?.language === "tl"
+                    ? "Mga savings goal at projeksyon sa hinaharap"
+                    : "Savings goals and future projections",
+              },
+              {
+                name: "Notes",
+                desc:
+                  config?.language === "tl"
+                    ? "Mga libreng tala na may checklist"
+                    : "Free-form notes with checklists",
+              },
+              {
+                name: "Settings",
+                desc:
+                  config?.language === "tl"
+                    ? "Kategorya, account, panahon, backup/restore, at marami pa"
+                    : "Categories, accounts, period, backup/restore, and more",
+              },
+            ].map(({ name, desc }) => (
+              <div key={name} className="flex gap-2">
+                <span className="text-xs font-semibold text-foreground min-w-[100px]">
+                  {name}
+                </span>
+                <span className="text-xs text-muted-foreground">— {desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Backup & Restore guide */}
+        <div className="border-t border-border pt-3">
+          <p className="text-xs font-semibold text-foreground mb-2">
+            {config?.language === "tl"
+              ? "Backup at Restore"
+              : "Backup & Restore"}
+          </p>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>
+              <span className="font-semibold text-foreground">
+                {config?.language === "tl" ? "I-export: " : "Export: "}
+              </span>
+              {config?.language === "tl"
+                ? 'Pumunta sa Settings → mag-scroll sa Data Backup → i-tap ang "Export Backup"'
+                : 'Go to Settings → scroll to Data Backup → tap "Export Backup"'}
+            </p>
+            <p>
+              <span className="font-semibold text-foreground">
+                {config?.language === "tl" ? "I-import: " : "Import: "}
+              </span>
+              {config?.language === "tl"
+                ? 'Pumunta sa Settings → mag-scroll sa Data Backup → i-tap ang "Import Backup" → piliin ang inyong JSON file'
+                : 'Go to Settings → scroll to Data Backup → tap "Import Backup" → select your JSON file'}
+            </p>
+            <div
+              className="mt-1 p-2 rounded-lg text-[11px]"
+              style={{
+                backgroundColor: "oklch(0.6 0.15 50 / 0.1)",
+                color: "oklch(0.5 0.15 50)",
+              }}
+            >
+              {config?.language === "tl"
+                ? "Palaging mag-export ng sariwang backup bago mag-import ng lumang backup."
+                : "Always export a fresh backup before importing an old one."}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Data Backup Section */}
       <Section title="Data Backup">

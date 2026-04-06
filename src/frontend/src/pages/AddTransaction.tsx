@@ -33,6 +33,7 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
     debitAccount,
     incomeSourceChips,
     goals,
+    addIOU,
   } = useFinanceData();
 
   const [amount, setAmount] = useState("");
@@ -48,6 +49,16 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
   const [selectedGoalId, setSelectedGoalId] = useState("");
   const [toAccountId, setToAccountId] = useState("");
 
+  // Split expense state
+  const [splitEnabled, setSplitEnabled] = useState(false);
+  const [splitPersonName, setSplitPersonName] = useState("");
+  const [splitAmount, setSplitAmount] = useState("");
+
+  // Calculator state
+  const [showCalc, setShowCalc] = useState(false);
+  const [calcExpression, setCalcExpression] = useState("");
+  const [calcResult, setCalcResult] = useState("");
+
   const mainCat = subCategory ? getMainCatForSub(subCategory) : null;
 
   useEffect(() => {
@@ -62,6 +73,42 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
       setShowSuggestion(null);
     }
   }, [description, subCategory, type]);
+
+  // Calculator evaluation helper
+  function evalCalc(expr: string): number {
+    const sanitized = expr.replace(/×/g, "*").replace(/÷/g, "/");
+    if (!/^[0-9+\-*/.]+$/.test(sanitized)) return 0;
+    try {
+      return Function(`"use strict"; return (${sanitized})`)() as number;
+    } catch {
+      return 0;
+    }
+  }
+
+  const handleCalcButton = (val: string) => {
+    if (val === "⌫") {
+      setCalcExpression((prev) => prev.slice(0, -1));
+      setCalcResult("");
+      return;
+    }
+    if (val === "=") {
+      const result = evalCalc(calcExpression);
+      setCalcResult(result.toString());
+      return;
+    }
+    if (val === "✓") {
+      const result = calcResult || evalCalc(calcExpression).toString();
+      if (result && Number(result) > 0) {
+        setAmount(Number(result).toString());
+      }
+      setShowCalc(false);
+      setCalcExpression("");
+      setCalcResult("");
+      return;
+    }
+    setCalcExpression((prev) => prev + val);
+    setCalcResult("");
+  };
 
   const handleSubmit = () => {
     const num = Number.parseFloat(amount);
@@ -193,6 +240,21 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
       finalMainCategory = mainCat ?? customCategories[0]?.name ?? "Needs";
       finalSubCategory = subCategory;
 
+      // Split expense validation
+      if (splitEnabled) {
+        const splitShare = Number.parseFloat(splitAmount);
+        if (!splitPersonName.trim()) {
+          toast.error("Enter the other person's name for split");
+          return;
+        }
+        if (!splitShare || splitShare <= 0 || splitShare >= num) {
+          toast.error(
+            "Their share must be greater than 0 and less than the total amount",
+          );
+          return;
+        }
+      }
+
       const budget = getBudgetForCategory(finalMainCategory);
       const spent = getSpentForSubCategory(finalSubCategory);
       if (spent + num > budget) {
@@ -219,6 +281,58 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
         const selectedAcc = accounts.find((a) => a.id === selectedAccountId);
         resolvedAccount = selectedAcc?.name;
       }
+    }
+
+    // ── Split expense flow ─────────────────────────────────────────────────────
+    if (type === "expense" && splitEnabled) {
+      const splitShare = Number.parseFloat(splitAmount);
+      const yourShare = num - splitShare;
+
+      // Log expense only for your share
+      addTransaction({
+        amount: yourShare,
+        date,
+        mainCategory: finalMainCategory,
+        subCategory: finalSubCategory,
+        description: description
+          ? `${description} (your share)`
+          : `${finalSubCategory} (your share)`,
+        type: "expense",
+        account: resolvedAccount,
+      });
+
+      // Debit account for the FULL amount (so CC balance matches statement)
+      if (selectedAccountId) {
+        const parentId = selectedAccountId.includes(">")
+          ? selectedAccountId.split(">")[0]
+          : selectedAccountId;
+        debitAccount(parentId, num);
+      }
+
+      // Auto-create IOU (Lent) for the other person's share
+      addIOU(
+        {
+          personName: splitPersonName.trim(),
+          amountLent: splitShare,
+          dateLent: date,
+          dueDate: date,
+          direction: "lent",
+        },
+        undefined, // no additional account debit — already debited full amount above
+      );
+
+      toast.success(
+        `Split recorded! You paid ₱${yourShare.toLocaleString()}, IOU for ₱${splitShare.toLocaleString()} created.`,
+      );
+      setAmount("");
+      setDescription("");
+      setSubCategory("");
+      setSelectedAccountId("");
+      setSplitEnabled(false);
+      setSplitPersonName("");
+      setSplitAmount("");
+      Promise.resolve().then(() => onDone());
+      return;
     }
 
     addTransaction({
@@ -339,17 +453,34 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
             <Label htmlFor="amount">{t("amount")}</Label>
-            <Input
-              id="amount"
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00"
-              min="0"
-              step="0.01"
-              className="mt-1"
-              data-ocid="add_transaction.amount.input"
-            />
+            {!showCalc ? (
+              <Input
+                id="amount"
+                type="number"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                onFocus={() => setShowCalc(true)}
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                className="mt-1"
+                data-ocid="add_transaction.amount.input"
+                readOnly
+              />
+            ) : (
+              <button
+                type="button"
+                className="mt-1 rounded-xl border border-border p-1 cursor-pointer w-full text-left"
+                onClick={() => setShowCalc(true)}
+                style={{ backgroundColor: "oklch(var(--secondary))" }}
+              >
+                <div className="text-right px-2 py-1 min-h-[36px] flex items-center justify-end">
+                  <span className="text-base font-bold text-foreground">
+                    {calcResult || calcExpression || "0"}
+                  </span>
+                </div>
+              </button>
+            )}
           </div>
           <div>
             <Label htmlFor="txdate">{t("date")}</Label>
@@ -363,6 +494,97 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
             />
           </div>
         </div>
+
+        {/* Calculator Keypad */}
+        {showCalc && (
+          <div
+            className="rounded-2xl border border-border p-3 mb-4"
+            style={{ backgroundColor: "oklch(var(--secondary))" }}
+            data-ocid="add_transaction.calculator.panel"
+          >
+            <div
+              className="text-right px-3 py-2 rounded-xl mb-2 min-h-[44px] flex items-center justify-end"
+              style={{ backgroundColor: "oklch(var(--card))" }}
+            >
+              <span className="text-lg font-bold text-foreground">
+                {calcResult ? (
+                  <span style={{ color: "oklch(var(--primary))" }}>
+                    {calcResult}
+                  </span>
+                ) : (
+                  calcExpression || (
+                    <span className="text-muted-foreground text-sm">
+                      tap to enter amount
+                    </span>
+                  )
+                )}
+              </span>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                "7",
+                "8",
+                "9",
+                "÷",
+                "4",
+                "5",
+                "6",
+                "×",
+                "1",
+                "2",
+                "3",
+                "−",
+                ".",
+                "0",
+                "⌫",
+                "+",
+              ].map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleCalcButton(key === "−" ? "-" : key)}
+                  className="h-11 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                  style={{
+                    backgroundColor: ["÷", "×", "−", "+"].includes(key)
+                      ? "oklch(var(--primary) / 0.2)"
+                      : "oklch(var(--card))",
+                    color: ["÷", "×", "−", "+"].includes(key)
+                      ? "oklch(var(--primary))"
+                      : "oklch(var(--foreground))",
+                  }}
+                  data-ocid="add_transaction.calc.button"
+                >
+                  {key}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => handleCalcButton("=")}
+                className="h-11 rounded-xl text-sm font-semibold col-span-2 transition-all active:scale-95"
+                style={{
+                  backgroundColor: "oklch(var(--secondary))",
+                  color: "oklch(var(--foreground))",
+                  border: "1px solid oklch(var(--border))",
+                }}
+                data-ocid="add_transaction.calc_equals.button"
+              >
+                =
+              </button>
+              <button
+                type="button"
+                onClick={() => handleCalcButton("✓")}
+                className="h-11 rounded-xl text-sm font-bold col-span-2 transition-all active:scale-95"
+                style={{
+                  backgroundColor: "oklch(var(--primary))",
+                  color: "oklch(var(--primary-foreground))",
+                }}
+                data-ocid="add_transaction.calc_confirm.button"
+              >
+                ✓ Use
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Save to Goal form ─────────────────────────────────────────── */}
         {type === "saveToGoal" && (
@@ -742,6 +964,88 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
                 ))}
               </div>
             </div>
+
+            {/* Split Expense Toggle — only for expenses */}
+            {type === "expense" && (
+              <div className="mt-4 mb-2">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm text-foreground"
+                  onClick={() => setSplitEnabled((prev) => !prev)}
+                  data-ocid="add_transaction.split.toggle"
+                >
+                  <div
+                    className="w-4 h-4 rounded border flex items-center justify-center"
+                    style={{
+                      backgroundColor: splitEnabled
+                        ? "oklch(var(--primary))"
+                        : "transparent",
+                      borderColor: splitEnabled
+                        ? "oklch(var(--primary))"
+                        : "oklch(var(--border))",
+                    }}
+                  >
+                    {splitEnabled && (
+                      <span className="text-[10px] text-white font-bold">
+                        ✓
+                      </span>
+                    )}
+                  </div>
+                  Split with someone
+                </button>
+                {splitEnabled && (
+                  <div
+                    className="mt-2 p-3 rounded-xl border border-border space-y-2"
+                    style={{ backgroundColor: "oklch(var(--secondary) / 0.5)" }}
+                    data-ocid="add_transaction.split.panel"
+                  >
+                    <div>
+                      <Label className="text-xs">Other person's name</Label>
+                      <Input
+                        value={splitPersonName}
+                        onChange={(e) => setSplitPersonName(e.target.value)}
+                        placeholder="e.g. Maria"
+                        className="mt-1 h-8 text-sm"
+                        data-ocid="add_transaction.split_person.input"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Their share (₱)</Label>
+                      <Input
+                        type="number"
+                        value={splitAmount}
+                        onChange={(e) => setSplitAmount(e.target.value)}
+                        placeholder="0.00"
+                        min="0"
+                        step="0.01"
+                        className="mt-1 h-8 text-sm"
+                        data-ocid="add_transaction.split_amount.input"
+                      />
+                    </div>
+                    {amount &&
+                      splitAmount &&
+                      Number(splitAmount) > 0 &&
+                      Number(splitAmount) < Number(amount) && (
+                        <p className="text-[11px] text-muted-foreground">
+                          You'll be charged ₱
+                          {(
+                            Number(amount) - Number(splitAmount)
+                          ).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          . An IOU will be created for ₱
+                          {Number(splitAmount).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          .
+                        </p>
+                      )}
+                  </div>
+                )}
+              </div>
+            )}
 
             <Button
               onClick={handleSubmit}

@@ -485,9 +485,45 @@ export function Accounts() {
       toast.error("Cannot transfer to the same account");
       return;
     }
+
+    const fromIsSubAccount = transferForm.fromId.includes(">");
+    const toIsSubAccount = transferForm.toId.includes(">");
+    const fromParentId = fromIsSubAccount
+      ? transferForm.fromId.split(">")[0]
+      : transferForm.fromId;
+    const toParentId = toIsSubAccount
+      ? transferForm.toId.split(">")[0]
+      : transferForm.toId;
+    const fromSubId = fromIsSubAccount
+      ? transferForm.fromId.split(">")[1]
+      : null;
+    const toSubId = toIsSubAccount ? transferForm.toId.split(">")[1] : null;
+
+    // Handle sub-account balance updates using editSubAccount
+    if (fromIsSubAccount && fromSubId) {
+      const fromParentAcc = accounts.find((a) => a.id === fromParentId);
+      const fromSub = fromParentAcc?.subAccounts?.find(
+        (s) => s.id === fromSubId,
+      );
+      if (fromSub) {
+        editSubAccount(fromParentId, fromSubId, {
+          balance: fromSub.balance - amount,
+        });
+      }
+    }
+    if (toIsSubAccount && toSubId) {
+      const toParentAcc = accounts.find((a) => a.id === toParentId);
+      const toSub = toParentAcc?.subAccounts?.find((s) => s.id === toSubId);
+      if (toSub) {
+        editSubAccount(toParentId, toSubId, {
+          balance: toSub.balance + amount,
+        });
+      }
+    }
+
     transferBetweenAccounts(
-      transferForm.fromId,
-      transferForm.toId,
+      fromParentId,
+      toParentId,
       amount,
       transferForm.note,
     );
@@ -1884,15 +1920,17 @@ export function Accounts() {
       {/* Add/Edit Sub-account Dialog */}
       {(showAddSubAccount || editSubAccountState) && (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center"
+          className="fixed inset-0 z-[60] flex items-end justify-center"
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
         >
           <div
-            className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto"
+            className="w-full max-w-lg rounded-t-3xl p-5 max-h-[70vh] flex flex-col"
             style={{ backgroundColor: "oklch(var(--card))" }}
             data-ocid="accounts.sub_account.dialog"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
               <h3 className="font-bold text-foreground">
                 {editSubAccountState ? "Edit Sub-account" : "Add Sub-account"}
               </h3>
@@ -1906,7 +1944,7 @@ export function Accounts() {
                 <X size={18} className="text-muted-foreground" />
               </button>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3 flex-1 overflow-y-auto">
               <div>
                 <Label className="text-xs">Name</Label>
                 <input
@@ -1976,61 +2014,61 @@ export function Accounts() {
                   </span>
                 </div>
               </div>
-              <div className="flex gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => {
-                    setShowAddSubAccount(null);
-                    setEditSubAccountState(null);
-                  }}
-                  data-ocid="accounts.sub_account.cancel_button"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  className="flex-1"
-                  onClick={() => {
-                    const subName = subAccountForm.name.trim();
-                    if (!subName) {
-                      toast.error("Name is required");
-                      return;
-                    }
-                    if (editSubAccountState) {
-                      editSubAccount(
-                        editSubAccountState.parentId,
-                        editSubAccountState.sub.id,
-                        {
-                          name: subName,
-                          color: subAccountForm.color || undefined,
-                        },
-                      );
-                      toast.success("Sub-account updated");
-                      setEditSubAccountState(null);
-                    } else if (showAddSubAccount) {
-                      const openingBalance =
-                        Number.parseFloat(subAccountForm.balance) || 0;
-                      addSubAccount(showAddSubAccount, {
+            </div>
+            <div className="flex gap-2 pt-3 flex-shrink-0">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => {
+                  setShowAddSubAccount(null);
+                  setEditSubAccountState(null);
+                }}
+                data-ocid="accounts.sub_account.cancel_button"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  const subName = subAccountForm.name.trim();
+                  if (!subName) {
+                    toast.error("Name is required");
+                    return;
+                  }
+                  if (editSubAccountState) {
+                    editSubAccount(
+                      editSubAccountState.parentId,
+                      editSubAccountState.sub.id,
+                      {
                         name: subName,
-                        balance: openingBalance,
-                        openingBalance:
-                          openingBalance > 0 ? openingBalance : undefined,
-                        openingDate: subAccountForm.openingDate || undefined,
                         color: subAccountForm.color || undefined,
-                      });
-                      toast.success(`${subName} added`);
-                      setShowAddSubAccount(null);
-                    }
-                  }}
-                  style={{
-                    backgroundColor: "oklch(var(--primary))",
-                    color: "oklch(var(--primary-foreground))",
-                  }}
-                  data-ocid="accounts.sub_account.save_button"
-                >
-                  {editSubAccountState ? "Save" : "Add"}
-                </Button>
-              </div>
+                      },
+                    );
+                    toast.success("Sub-account updated");
+                    setEditSubAccountState(null);
+                  } else if (showAddSubAccount) {
+                    const openingBalance =
+                      Number.parseFloat(subAccountForm.balance) || 0;
+                    addSubAccount(showAddSubAccount, {
+                      name: subName,
+                      balance: openingBalance,
+                      openingBalance:
+                        openingBalance > 0 ? openingBalance : undefined,
+                      openingDate: subAccountForm.openingDate || undefined,
+                      color: subAccountForm.color || undefined,
+                    });
+                    toast.success(`${subName} added`);
+                    setShowAddSubAccount(null);
+                  }
+                }}
+                style={{
+                  backgroundColor: "oklch(var(--primary))",
+                  color: "oklch(var(--primary-foreground))",
+                }}
+                data-ocid="accounts.sub_account.save_button"
+              >
+                {editSubAccountState ? "Save" : "Add"}
+              </Button>
             </div>
           </div>
         </div>
@@ -2049,7 +2087,7 @@ export function Accounts() {
               style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
             >
               <div
-                className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto"
+                className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto pb-24"
                 style={{ backgroundColor: "oklch(var(--card))" }}
                 data-ocid="accounts.sub_account_history.sheet"
               >
@@ -2322,11 +2360,20 @@ export function Accounts() {
                   <SelectValue placeholder="Select source account" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map((acc) => (
+                  {accounts.flatMap((acc) => [
                     <SelectItem key={acc.id} value={acc.id}>
                       {acc.name} ({formatAmount(acc.balance, currency)})
-                    </SelectItem>
-                  ))}
+                    </SelectItem>,
+                    ...(acc.subAccounts ?? []).map((sub) => (
+                      <SelectItem
+                        key={`${acc.id}>${sub.id}`}
+                        value={`${acc.id}>${sub.id}`}
+                      >
+                          {acc.name} › {sub.name} (
+                        {formatAmount(sub.balance, currency)})
+                      </SelectItem>
+                    )),
+                  ])}
                 </SelectContent>
               </Select>
             </div>
@@ -2345,11 +2392,20 @@ export function Accounts() {
                   <SelectValue placeholder="Select destination account" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map((acc) => (
+                  {accounts.flatMap((acc) => [
                     <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name}
-                    </SelectItem>
-                  ))}
+                      {acc.name} ({formatAmount(acc.balance, currency)})
+                    </SelectItem>,
+                    ...(acc.subAccounts ?? []).map((sub) => (
+                      <SelectItem
+                        key={`${acc.id}>${sub.id}`}
+                        value={`${acc.id}>${sub.id}`}
+                      >
+                          {acc.name} › {sub.name} (
+                        {formatAmount(sub.balance, currency)})
+                      </SelectItem>
+                    )),
+                  ])}
                 </SelectContent>
               </Select>
             </div>

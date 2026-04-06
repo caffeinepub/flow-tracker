@@ -31,7 +31,8 @@ function getNextDue(
   lastGenerated: string | null,
 ): Date {
   const start = parseISO(startDate);
-  const base = lastGenerated ? parseISO(lastGenerated) : start;
+  if (!lastGenerated) return start; // never run — next due is the start date itself
+  const base = parseISO(lastGenerated);
   if (frequency === "weekly") return addDays(base, 7);
   if (frequency === "biweekly") return addDays(base, 14);
   return addMonths(base, 1);

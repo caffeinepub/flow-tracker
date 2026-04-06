@@ -519,9 +519,14 @@ export function Projections() {
           onClick={() => toggleProjSection("scenario")}
           data-ocid="projections.scenario.toggle"
         >
-          <h2 className="text-sm font-semibold text-muted-foreground">
-            Scenario Sliders
-          </h2>
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Scenario Sliders
+            </h2>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Simulation only — adjustments are temporary and not saved
+            </p>
+          </div>
           {isProjCollapsed("scenario") ? (
             <ChevronDown size={14} className="text-muted-foreground" />
           ) : (
@@ -531,14 +536,35 @@ export function Projections() {
         {!isProjCollapsed("scenario") && (
           <div className="space-y-4 px-4 pb-4">
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-xs">Adjust Monthly Income</Label>
-                <span
-                  className="text-sm font-bold"
-                  style={{ color: "oklch(var(--primary))" }}
-                >
-                  {formatAmount(scenarioIncome, currency)}
-                </span>
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <Label className="text-xs">Adjust Monthly Income</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Drag to see how a different income changes your projections
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Base:{" "}
+                    {formatAmount(projectionSettings.monthlyIncome, currency)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span
+                    className="text-sm font-bold"
+                    style={{ color: "oklch(var(--primary))" }}
+                  >
+                    {formatAmount(scenarioIncome, currency)}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-[10px] text-muted-foreground underline ml-1"
+                    onClick={() =>
+                      setScenarioIncome(projectionSettings.monthlyIncome)
+                    }
+                    data-ocid="projections.scenario_income.reset"
+                  >
+                    Reset
+                  </button>
+                </div>
               </div>
               <Slider
                 value={[scenarioIncome]}
@@ -555,14 +581,31 @@ export function Projections() {
             </div>
             {showReturnRateSlider && (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label className="text-xs">Adjust Return Rate</Label>
-                  <span
-                    className="text-sm font-bold"
-                    style={{ color: "oklch(var(--primary))" }}
-                  >
-                    {scenarioRate}%
-                  </span>
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <Label className="text-xs">Adjust Return Rate</Label>
+                    <p className="text-[10px] text-muted-foreground">
+                      Annual interest/return rate on savings or investments
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span
+                      className="text-sm font-bold"
+                      style={{ color: "oklch(var(--primary))" }}
+                    >
+                      {scenarioRate}%
+                    </span>
+                    <button
+                      type="button"
+                      className="text-[10px] text-muted-foreground underline ml-1"
+                      onClick={() =>
+                        setScenarioRate(projectionSettings.returnRatePct)
+                      }
+                      data-ocid="projections.scenario_rate.reset"
+                    >
+                      Reset
+                    </button>
+                  </div>
                 </div>
                 <Slider
                   value={[scenarioRate]}
@@ -1086,7 +1129,8 @@ export function Projections() {
           <div className="px-4 pb-4 space-y-2">
             {customCategories.flatMap((cat) =>
               cat.subCategories.map((sub) => {
-                const monthly = getBudgetForSubCategory(cat.name, sub.name);
+                const monthly =
+                  getBudgetForSubCategory(cat.name, sub.name) * salaryRatio;
                 const expandKey = `${cat.id}-${sub.id}`;
                 const isExpanded = expandedSubs.has(expandKey);
                 const goalForSub = goals.find(

@@ -816,6 +816,7 @@ export function useFinanceData() {
             description: `Opening Balance - ${subAccountData.name}`,
             type: "income" as const,
             account: parentAcc ? `${parentId}>${subId}` : undefined,
+            isOpeningBalance: true,
           },
           ...prev,
         ]);

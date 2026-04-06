@@ -1,97 +1,41 @@
 # Flow Tracker
 
 ## Current State
-
-Flow Tracker is a mobile-first, offline-first PWA for personal finance tracking (localStorage only, no backend). Current version (v27/mainnet) includes:
-- Multi-account support (cash, bank, ewallet, credit) with transaction history per account
-- Budget categories with global %/₱ toggle, subcategory ₱ inputs
-- Financial goals with "already saved" baseline, account picker, date field, delta-based edits
-- Bill Tracker nested in Accounts (add/edit/delete, due dates, mark paid/unpaid)
-- IOU Tracker nested in Accounts (lent/borrowed flows)
-- Data backup/restore (JSON export/import)
-- Excess-to-savings prompt at period end
-- User guide ("?" icon per section, EN/Tagalog)
-- PWA/offline support via Service Worker
-- Collapsible sections with persisted state
-- Onboarding with category/account setup and custom period dates
-- Reports, History, Projections, Recurring tabs
-
-Key type definitions:
-- `Account`: id, name, type, balance, creditLimit, apr, dueDate, color — NO subAccounts field yet
-- `Config`: salary, period, customStartDate, customEndDate — NO periodMode field yet
-- `Transaction`: id, amount, date, mainCategory, subCategory, description, type, account
-- `Goal`: id, subCategoryId, targetAmount, currentSaved, alreadySavedAccountId, startDate
-- `Bill`: id, name, amount, dueDayOfMonth, isPaidThisPeriod, notes
-- localStorage keys: sft_config, sft_transactions, sft_periods, sft_recurring, sft_accounts, sft_goals
-- NO sft_notes, NO sft_next_period_draft keys yet
+Flow Tracker is a mobile-first, offline-first PWA for personal finance tracking. It has accounts with sub-accounts, transactions (income/expense/transfer/save-to-goal), recurring rules, bill tracker, IOU tracker, notes, projections with scenario sliders and subcategory breakdown, reports with YTD summaries, and next period planning. Data is stored in localStorage.
 
 ## Requested Changes (Diff)
 
 ### Add
-
-1. **Sub-accounts** — Each `Account` can have optional sub-accounts. Each sub-account has its own balance, name, opening balance with date. Sub-account balances roll up to the parent account total. All transaction types (Income, Expense, Transfer, Save to Goal) show sub-accounts in the account picker (displayed as "OwnBank > Parked Funds"). Account history view works at both parent and sub-account level. In the Accounts list, sub-accounts show as indented items under the parent, collapsed by default, expandable. Net worth uses parent account totals (which already include sub-account balances).
-
-2. **Notes** — A new section (accessible from bottom nav or within a tab) where users can create free-form notes with optional checklist items. Each note has: title (optional), free-form text body (optional), optional checklist (add/check/uncheck/delete items), optional color tag for visual organization. Notes are searchable by title or content. Full add/edit/delete support.
-
-3. **Onboarding introduction screen** — A new first screen shown ONLY on first launch (before existing onboarding). Shows plain-language explanation of what Flow Tracker is, what it does, and why it's useful. Displayed in both English and Tagalog matching the app language. Three key questions format: "Saan napunta ang pera ko?", "Magkano pa ang natitira?", "Kailan ko maaabot ang goal ko?". Has a "Get Started" / "Magsimula" button that proceeds to existing onboarding. Never shown again once dismissed (tracked in localStorage).
-
-4. **Next Period Planning** — In Settings > Period Management, add a "Plan Next Period" button. Opens a form to set: start date, end date, expected income, and budget allocations for the upcoming period. Saved as a draft (sft_next_period_draft in localStorage). Zero impact on current period data. When current period ends (or user chooses to switch), an "Activate" button appears to apply the draft as the new active period. Draft can be edited or discarded at any time.
-
-5. **Period Mode vs Monthly Mode** — Add a `periodMode: 'period' | 'monthly'` field to Config. During onboarding (new screen before period setup), user selects their preferred mode. Also switchable in Settings at any time.
-   - **Period mode** (default/current behavior): custom start/end dates, manual period management
-   - **Monthly mode**: budget resets automatically on the 1st of each calendar month; no manual period management needed; Dashboard shows monthly totals instead of period totals; no period-end prompts
-   Existing users without this field default to 'period' mode to preserve their setup.
+- **Split Expense** — optional toggle on Add Transaction (expense type only); enter full amount and other person's share; app records only your share as expense, adjusts account balance by full amount, and auto-logs an IOU (Lent) for the other person's portion
+- **Built-in Calculator** — calculator keypad modal on the amount field in AddTransaction; supports +, -, ×, ÷, decimal, backspace, equals, confirm; result populates amount field
+- **Update App button in Settings** — checks for waiting Service Worker, triggers skipWaiting and reload; shows version info and last updated date; displays "Up to date" or "Update available"
+- **Help / User Manual in Settings** — dedicated collapsible section with tabbed device guides (Android, iPhone, Desktop), feature overview, update instructions, backup/restore guide; available in English and Tagalog
+- `isOpeningBalance: boolean` flag on Transaction type — used to exclude opening balance entries from income reports
 
 ### Modify
-
-- `types/index.ts`: Add `SubAccount` interface and `subAccounts?: SubAccount[]` to `Account`. Add `Note` and `ChecklistItem` interfaces. Add `periodMode?: 'period' | 'monthly'` to `Config`. Add `NextPeriodDraft` interface.
-- `useFinanceData.ts`: Add state/handlers for notes (sft_notes), sub-accounts (embedded in sft_accounts as part of Account), next period draft (sft_next_period_draft), period mode logic. Update account balance calculations to include sub-account balances. Update transaction account picker to support sub-account selection.
-- `Accounts.tsx`: Show sub-accounts as indented list under parent, collapsible. Add sub-account creation/edit/delete UI. Account history view filters by sub-account if one is selected.
-- `AddTransaction.tsx`: Account picker shows parent accounts AND sub-accounts (formatted as "Parent > Sub").
-- `Settings.tsx`: Add period mode toggle (Period/Monthly). Add "Plan Next Period" button and draft period form in Period Management section.
-- `Onboarding.tsx`: Add intro screen as first step (shown only once). Add period mode selection step.
-- `BottomNav.tsx`: Add Notes tab (replacing or adding to existing tabs, max 6).
-- `i18n/translations.ts`: Add translation keys for all new features.
-- `App.tsx`: Add Notes page route/tab.
+- **Reports > Income** — filter out transactions where `isOpeningBalance === true` from income totals and income breakdown by source
+- **Transfer dialog (Accounts)** — From and To dropdowns include sub-accounts listed under their parent account, indented with parent name prefix (e.g. "OwnBank › Parked Funds")
+- **Sub-account detail view** — add `pb-24` bottom padding so content is not hidden behind bottom nav bar
+- **Next Period Planning form (Settings)** — add category allocation step after dates and income; show all categories with per-category budget inputs respecting global %/₱ toggle; show running total vs expected income; warn if allocations don't match; save allocations into `nextPeriodDraft.customCategories`
+- **Recurring `getNextDue`** — when `lastGenerated` is null, return `startDate` directly instead of `startDate + 1 interval`
+- **Subcategory Breakdown (Projections)** — multiply `monthly` by `salaryRatio` so scenario income slider affects the breakdown amounts
+- **Scenario Sliders section (Projections)** — add subtitle "Simulation only — changes are not saved"; add plain-language description under each slider; show saved base value for reference; add reset button to restore slider to saved base
+- **Opening balance transaction logging** — add `isOpeningBalance: true` flag when logging opening balance income transaction for sub-accounts
 
 ### Remove
-
-- Nothing removed.
+- Nothing removed
 
 ## Implementation Plan
-
-1. **Types** — Update `types/index.ts` with SubAccount, Note, ChecklistItem, NextPeriodDraft interfaces and update Account/Config.
-
-2. **Data layer** — Update `useFinanceData.ts`:
-   - Add notes state (sft_notes)
-   - Add next period draft state (sft_next_period_draft)
-   - Add periodMode logic (monthly mode auto-resets on 1st of month)
-   - Update account handlers to support sub-accounts (add, edit, delete sub-account, opening balance logic)
-   - Update net worth calculation to use parent balance (which should sum sub-account balances)
-   - Update account picker data to expose sub-account options
-
-3. **Sub-accounts UI** — Update `Accounts.tsx`:
-   - Indented sub-account rows under parent with expand/collapse
-   - Add/edit/delete sub-account sheet/dialog
-   - Opening balance field with date picker on creation
-   - Sub-account history view (filtered transactions)
-
-4. **Notes page** — Create `src/frontend/src/pages/Notes.tsx`:
-   - List of notes with title, color tag, preview text, checklist progress
-   - Search bar
-   - Add/edit note sheet with title, color picker, free-form textarea, checklist section
-   - Check/uncheck individual checklist items inline
-
-5. **Transaction account picker** — Update `AddTransaction.tsx` to show sub-accounts as selectable options formatted "Parent > Sub".
-
-6. **Onboarding intro screen** — Update `Onboarding.tsx` to show intro as step 0 (one-time, tracked via sft_intro_seen in localStorage). Add period mode selection step.
-
-7. **Next Period Planning** — Update `Settings.tsx` Period Management section with Plan Next Period button and draft form.
-
-8. **Period Mode toggle** — Add to Settings and handle monthly mode logic in Dashboard/Reports.
-
-9. **Navigation** — Update `BottomNav.tsx` and `App.tsx` to include Notes tab.
-
-10. **Translations** — Add all new keys to `i18n/translations.ts` in both EN and Tagalog.
-
-11. **Data migration** — Ensure existing users without new fields get safe defaults on load.
+1. Add `isOpeningBalance?: boolean` to Transaction type in `types/index.ts`
+2. Set `isOpeningBalance: true` on opening balance transactions in `useFinanceData.ts` (addSubAccount)
+3. Filter `isOpeningBalance` transactions out of income totals and breakdown in `Reports.tsx`
+4. Update transfer dialog in `Accounts.tsx` to flatten accounts+subaccounts into a combined list for From/To dropdowns
+5. Add `pb-24` to sub-account detail/history view in `Accounts.tsx`
+6. Expand Next Period Planning form in `Settings.tsx` to include category allocation inputs with running total and save into `nextPeriodDraft.customCategories`
+7. Fix `getNextDue` in `Recurring.tsx` — return `startDate` when `lastGenerated` is null
+8. Apply `salaryRatio` to `monthly` in Subcategory Breakdown in `Projections.tsx`
+9. Improve Scenario Sliders UI in `Projections.tsx` — subtitle, descriptions, base value reference, reset button
+10. Build Calculator component and wire into amount field in `AddTransaction.tsx`
+11. Add Split Expense toggle in `AddTransaction.tsx` — split amount input, auto-IOU on submit
+12. Add Update App button in `Settings.tsx` — Service Worker registration check, skipWaiting, reload
+13. Add Help / User Manual section in `Settings.tsx` — tabbed device guides (Android/iPhone/Desktop), feature overview, EN/Tagalog

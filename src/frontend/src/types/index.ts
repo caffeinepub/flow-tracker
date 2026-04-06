@@ -118,6 +118,7 @@ export interface Transaction {
   description: string;
   type: TransactionType;
   account?: string; // optional — which account this transaction belongs to
+  isOpeningBalance?: boolean; // true for sub-account opening balance transactions
 }
 
 export interface SalaryPeriod {

@@ -19,9 +19,12 @@ import type {
   Goal,
   IOU,
   IOUEvent,
+  NextPeriodDraft,
+  Note,
   ProjectionSettings,
   RecurringTransaction,
   SalaryPeriod,
+  SubAccount,
   Transaction,
 } from "../types";
 import { useLocalStorage } from "./useLocalStorage";
@@ -154,10 +157,18 @@ export function useFinanceData() {
     });
   const [ious, setIOUs] = useLocalStorage<IOU[]>("sft_ious", DEFAULT_IOUS);
   const [bills, setBills] = useLocalStorage<Bill[]>("sft_bills", []);
+  const [notes, setNotes] = useLocalStorage<Note[]>("sft_notes", []);
+  const [nextPeriodDraft, setNextPeriodDraft] =
+    useLocalStorage<NextPeriodDraft | null>("sft_next_period_draft", null);
 
   // Migrate config on first load if needed
   const config = rawConfig ? migrateConfig(rawConfig) : null;
   const setConfig = setRawConfig;
+
+  // Migrate accounts: ensure subAccounts field exists
+  const migratedAccounts = accounts.map((a) =>
+    a.subAccounts === undefined ? { ...a, subAccounts: [] } : a,
+  );
 
   const isOnboarded =
     config !== null && config.name !== "" && config.salary > 0;
@@ -309,15 +320,32 @@ export function useFinanceData() {
     [config?.customEndDate],
   );
 
-  const currentPeriodEnd = config
-    ? getPeriodEndDate(config.startDate, config.period)
-    : format(new Date(), "yyyy-MM-dd");
+  // Monthly mode: use first and last day of current calendar month
+  const isMonthlyMode = config?.periodMode === "monthly";
+  const monthlyPeriodStart = format(
+    new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+    "yyyy-MM-dd",
+  );
+  const monthlyPeriodEnd = format(
+    new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
+    "yyyy-MM-dd",
+  );
+
+  const currentPeriodEnd = isMonthlyMode
+    ? monthlyPeriodEnd
+    : config
+      ? getPeriodEndDate(config.startDate, config.period)
+      : format(new Date(), "yyyy-MM-dd");
+
+  const effectivePeriodStart = isMonthlyMode
+    ? monthlyPeriodStart
+    : (config?.startDate ?? format(new Date(), "yyyy-MM-dd"));
 
   const currentTransactions = transactions.filter((t) => {
     if (!config) return false;
     try {
       const txDate = parseISO(t.date);
-      const start = parseISO(config.startDate);
+      const start = parseISO(effectivePeriodStart);
       const end = parseISO(currentPeriodEnd);
       return isWithinInterval(txDate, { start, end });
     } catch {
@@ -463,9 +491,16 @@ export function useFinanceData() {
       setTransactions((prev) => {
         const tx = prev.find((t) => t.id === id);
         if (tx?.account) {
+          const txAccount = tx.account;
+          const isSubAccount = txAccount.includes(">");
           setAccounts((accs) =>
             accs.map((a) => {
-              if (a.name !== tx.account) return a;
+              // For sub-accounts: match by parentId (before the ">")
+              // For regular accounts: match by name
+              const matches = isSubAccount
+                ? a.id === txAccount.split(">")[0]
+                : a.name === txAccount;
+              if (!matches) return a;
               const delta =
                 tx.type === "expense"
                   ? tx.amount // add back what was deducted
@@ -742,6 +777,84 @@ export function useFinanceData() {
   const reorderAccounts = useCallback(
     (newOrder: Account[]) => {
       setAccounts(newOrder);
+    },
+    [setAccounts],
+  );
+
+  // Sub-account CRUD
+  const addSubAccount = useCallback(
+    (parentId: string, subAccountData: Omit<SubAccount, "id">) => {
+      const subId = crypto.randomUUID();
+      const newSub: SubAccount = { ...subAccountData, id: subId };
+      setAccounts((prev) =>
+        prev.map((a) => {
+          if (a.id !== parentId) return a;
+          const subs = a.subAccounts ?? [];
+          const updated = { ...a, subAccounts: [...subs, newSub] };
+          // Add opening balance to parent if provided
+          if (
+            subAccountData.openingBalance &&
+            subAccountData.openingBalance > 0
+          ) {
+            updated.balance = a.balance + subAccountData.openingBalance;
+          }
+          return updated;
+        }),
+      );
+      // Log an income transaction for the opening balance
+      if (subAccountData.openingBalance && subAccountData.openingBalance > 0) {
+        const parentAcc = accounts.find((a) => a.id === parentId);
+        const txDate =
+          subAccountData.openingDate || new Date().toISOString().split("T")[0];
+        setTransactions((prev) => [
+          {
+            id: crypto.randomUUID(),
+            amount: subAccountData.openingBalance!,
+            date: txDate,
+            mainCategory: "Income",
+            subCategory: "Opening Balance",
+            description: `Opening Balance - ${subAccountData.name}`,
+            type: "income" as const,
+            account: parentAcc ? `${parentId}>${subId}` : undefined,
+          },
+          ...prev,
+        ]);
+      }
+    },
+    [setAccounts, setTransactions, accounts],
+  );
+
+  const editSubAccount = useCallback(
+    (parentId: string, subAccountId: string, updates: Partial<SubAccount>) => {
+      setAccounts((prev) =>
+        prev.map((a) => {
+          if (a.id !== parentId) return a;
+          return {
+            ...a,
+            subAccounts: (a.subAccounts ?? []).map((s) =>
+              s.id === subAccountId ? { ...s, ...updates } : s,
+            ),
+          };
+        }),
+      );
+    },
+    [setAccounts],
+  );
+
+  const deleteSubAccount = useCallback(
+    (parentId: string, subAccountId: string) => {
+      // Deleting a sub-account does NOT reverse the balance (money stays in parent)
+      setAccounts((prev) =>
+        prev.map((a) => {
+          if (a.id !== parentId) return a;
+          return {
+            ...a,
+            subAccounts: (a.subAccounts ?? []).filter(
+              (s) => s.id !== subAccountId,
+            ),
+          };
+        }),
+      );
     },
     [setAccounts],
   );
@@ -1283,6 +1396,72 @@ export function useFinanceData() {
   );
 
   // Bill callbacks
+  // Notes CRUD
+  const addNote = useCallback(
+    (note: Omit<Note, "id" | "createdAt" | "updatedAt">) => {
+      const now = new Date().toISOString();
+      const newNote: Note = {
+        ...note,
+        id: crypto.randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+      };
+      setNotes((prev) => [newNote, ...prev]);
+    },
+    [setNotes],
+  );
+
+  const editNote = useCallback(
+    (id: string, updates: Partial<Omit<Note, "id" | "createdAt">>) => {
+      setNotes((prev) =>
+        prev.map((n) =>
+          n.id === id
+            ? { ...n, ...updates, updatedAt: new Date().toISOString() }
+            : n,
+        ),
+      );
+    },
+    [setNotes],
+  );
+
+  const deleteNote = useCallback(
+    (id: string) => {
+      setNotes((prev) => prev.filter((n) => n.id !== id));
+    },
+    [setNotes],
+  );
+
+  // Next Period Draft
+  const saveNextPeriodDraft = useCallback(
+    (draft: Omit<NextPeriodDraft, "createdAt">) => {
+      setNextPeriodDraft({ ...draft, createdAt: new Date().toISOString() });
+    },
+    [setNextPeriodDraft],
+  );
+
+  const discardNextPeriodDraft = useCallback(() => {
+    setNextPeriodDraft(null);
+  }, [setNextPeriodDraft]);
+
+  const activateNextPeriod = useCallback(() => {
+    if (!nextPeriodDraft) return;
+    setConfig((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        startDate: nextPeriodDraft.startDate,
+        customStartDate: nextPeriodDraft.startDate,
+        customEndDate: nextPeriodDraft.endDate,
+        period: "custom",
+        salary: nextPeriodDraft.expectedIncome,
+        customCategories:
+          nextPeriodDraft.customCategories ?? prev.customCategories,
+      };
+    });
+    setNextPeriodDraft(null);
+    toast.success("Next period activated!");
+  }, [nextPeriodDraft, setConfig, setNextPeriodDraft]);
+
   const addBill = useCallback(
     (bill: Omit<Bill, "id" | "isPaidThisPeriod">) => {
       const newBill: Bill = {
@@ -1356,7 +1535,7 @@ export function useFinanceData() {
     exportCSV,
     allSubCategories,
     getPeriodEndDate,
-    accounts,
+    accounts: migratedAccounts,
     addAccount,
     updateAccount,
     creditAccount,
@@ -1394,5 +1573,19 @@ export function useFinanceData() {
     updateBill,
     deleteBill,
     toggleBillPaid,
+    // Sub-accounts
+    addSubAccount,
+    editSubAccount,
+    deleteSubAccount,
+    // Notes
+    notes,
+    addNote,
+    editNote,
+    deleteNote,
+    // Next Period Draft
+    nextPeriodDraft,
+    saveNextPeriodDraft,
+    discardNextPeriodDraft,
+    activateNextPeriod,
   };
 }

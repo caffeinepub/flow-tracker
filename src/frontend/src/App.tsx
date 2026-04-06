@@ -9,6 +9,8 @@ import { Accounts } from "./pages/Accounts";
 import { AddTransaction } from "./pages/AddTransaction";
 import { Dashboard } from "./pages/Dashboard";
 import { History } from "./pages/History";
+import { IntroScreen } from "./pages/IntroScreen";
+import { Notes } from "./pages/Notes";
 import { Onboarding } from "./pages/Onboarding";
 import { Projections } from "./pages/Projections";
 import { Settings } from "./pages/Settings";
@@ -18,6 +20,15 @@ export default function App() {
   const { config, setConfig, isOnboarded } = useFinanceData();
   const t = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+
+  // Intro screen — shown only once, tracked by localStorage
+  const [showIntro, setShowIntro] = useState(() => {
+    try {
+      return !localStorage.getItem("sft_intro_seen");
+    } catch {
+      return false;
+    }
+  });
 
   useEffect(() => {
     const isDark = config?.theme !== "light";
@@ -36,6 +47,31 @@ export default function App() {
     const newTheme = config?.theme === "dark" ? "light" : "dark";
     setConfig((prev) => (prev ? { ...prev, theme: newTheme } : prev));
   };
+
+  const handleIntroComplete = () => {
+    try {
+      localStorage.setItem("sft_intro_seen", "1");
+    } catch {}
+    setShowIntro(false);
+  };
+
+  // Detect browser language for intro screen
+  const browserLang =
+    navigator.language?.startsWith("fil") ||
+    navigator.language?.startsWith("tl")
+      ? "tl"
+      : "en";
+  const introLang = (config?.language ?? browserLang) as "en" | "tl";
+
+  // Show intro for new users
+  if (!isOnboarded && showIntro) {
+    return (
+      <div className="dark">
+        <IntroScreen language={introLang} onGetStarted={handleIntroComplete} />
+        <Toaster />
+      </div>
+    );
+  }
 
   if (!isOnboarded) {
     return (
@@ -60,6 +96,8 @@ export default function App() {
         return "Projections";
       case "history":
         return "History";
+      case "notes":
+        return "Notes";
       case "settings":
         return t("settings");
       default:
@@ -119,6 +157,7 @@ export default function App() {
           {activeTab === "accounts" && <Accounts />}
           {activeTab === "projections" && <Projections />}
           {activeTab === "history" && <History onNavigate={setActiveTab} />}
+          {activeTab === "notes" && <Notes />}
           {activeTab === "settings" && <Settings />}
         </main>
 

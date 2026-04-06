@@ -25,6 +25,15 @@ export interface CustomCategory {
   allocationAmount?: number; // new: exact amount in currency when mode is "amount"
 }
 
+export interface SubAccount {
+  id: string;
+  name: string;
+  balance: number;
+  openingBalance?: number;
+  openingDate?: string; // ISO date string
+  color?: string;
+}
+
 export interface Account {
   id: string;
   name: string;
@@ -34,6 +43,7 @@ export interface Account {
   apr?: number; // annual % rate, for credit type
   dueDate?: string; // ISO date string, monthly due date for CC
   color?: string;
+  subAccounts?: SubAccount[];
 }
 
 export interface Goal {
@@ -51,6 +61,30 @@ export interface Goal {
 export interface ProjectionSettings {
   monthlyIncome: number;
   returnRatePct: number;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  checked: boolean;
+}
+
+export interface Note {
+  id: string;
+  title?: string;
+  body?: string;
+  checklist?: ChecklistItem[];
+  colorTag?: string; // hex color
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
+}
+
+export interface NextPeriodDraft {
+  startDate: string;
+  endDate: string;
+  expectedIncome: number;
+  customCategories?: CustomCategory[];
+  createdAt: string;
 }
 
 export interface Config {
@@ -71,6 +105,8 @@ export interface Config {
   theme: Theme;
   // Income source chips
   incomeSourceChips?: string[];
+  // Period mode: 'period' = custom dates, 'monthly' = calendar month
+  periodMode?: "period" | "monthly";
 }
 
 export interface Transaction {

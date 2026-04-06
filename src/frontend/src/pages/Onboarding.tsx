@@ -22,6 +22,10 @@ const PERIODS: { value: Period; label: string }[] = [
 export function Onboarding({ onComplete }: OnboardingProps) {
   const t = useTranslation();
   const [step, setStep] = useState(0);
+  // Step 0: profile/income/period
+  // Step 1: period mode (period vs monthly)
+  // Step 2: budget allocation
+  // Step 3: review
   const [name, setName] = useState("");
   const [salary, setSalary] = useState("");
   const [period, setPeriod] = useState<Period>("monthly");
@@ -32,6 +36,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [lang, setLang] = useState<Language>("en");
   const [customEndDate, setCustomEndDate] = useState("");
   const [customStartDate, setCustomStartDate] = useState("");
+  const [periodMode, setPeriodMode] = useState<"period" | "monthly">("period");
 
   const total = needsPct + wantsPct + savingsPct;
   const isValidAllocation = total === 100;
@@ -44,7 +49,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     const config: Config = {
       name: name.trim() || "User",
       salary: Number.parseFloat(salary) || 0,
-      period,
+      period: periodMode === "monthly" ? "monthly" : period,
       currency,
       needsPct,
       wantsPct,
@@ -52,17 +57,31 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       startDate: resolvedStartDate,
       language: lang,
       theme: "dark",
+      periodMode,
       ...(period === "custom" && customStartDate ? { customStartDate } : {}),
       ...(period === "custom" && customEndDate ? { customEndDate } : {}),
     };
     onComplete(config);
   };
 
-  const steps = [
-    { title: t("onboarding1Title"), desc: t("onboarding1Desc") },
-    { title: t("onboarding2Title"), desc: t("onboarding2Desc") },
-    { title: t("onboarding3Title"), desc: t("onboarding3Desc") },
+  const totalSteps = 4;
+  const stepTitles = [
+    t("onboarding1Title"),
+    "How do you manage your budget?",
+    t("onboarding2Title"),
+    t("onboarding3Title"),
   ];
+  const stepDescs = [
+    t("onboarding1Desc"),
+    "Choose the mode that works best for you",
+    t("onboarding2Desc"),
+    t("onboarding3Desc"),
+  ];
+
+  const canGoNext = () => {
+    if (step === 2) return isValidAllocation;
+    return true;
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 gradient-bg">
@@ -77,38 +96,26 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       <div className="flex gap-2 mb-8">
-        <div
-          className="h-1.5 rounded-full transition-all duration-300"
-          style={{
-            width: step >= 0 ? 24 : 8,
-            backgroundColor:
-              step >= 0 ? "oklch(var(--primary))" : "oklch(var(--muted))",
-          }}
-        />
-        <div
-          className="h-1.5 rounded-full transition-all duration-300"
-          style={{
-            width: step >= 1 ? 24 : 8,
-            backgroundColor:
-              step >= 1 ? "oklch(var(--primary))" : "oklch(var(--muted))",
-          }}
-        />
-        <div
-          className="h-1.5 rounded-full transition-all duration-300"
-          style={{
-            width: step >= 2 ? 24 : 8,
-            backgroundColor:
-              step >= 2 ? "oklch(var(--primary))" : "oklch(var(--muted))",
-          }}
-        />
+        {Array.from({ length: totalSteps }, (_, i) => i).map((i) => (
+          <div
+            key={`step-dot-${i}`}
+            className="h-1.5 rounded-full transition-all duration-300"
+            style={{
+              width: step >= i ? 24 : 8,
+              backgroundColor:
+                step >= i ? "oklch(var(--primary))" : "oklch(var(--muted))",
+            }}
+          />
+        ))}
       </div>
 
       <div className="w-full max-w-sm slide-up">
         <h1 className="text-2xl font-bold text-foreground mb-1">
-          {steps[step].title}
+          {stepTitles[step]}
         </h1>
-        <p className="text-muted-foreground mb-6">{steps[step].desc}</p>
+        <p className="text-muted-foreground mb-6">{stepDescs[step]}</p>
 
+        {/* Step 0: Profile */}
         {step === 0 && (
           <div className="space-y-4">
             <div>
@@ -163,62 +170,6 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               </div>
             </div>
             <div>
-              <Label>{t("period")}</Label>
-              <div className="flex gap-2 mt-1 flex-wrap">
-                {PERIODS.map((p) => (
-                  <button
-                    type="button"
-                    key={p.value}
-                    onClick={() => setPeriod(p.value)}
-                    className="flex-1 py-2 rounded-lg text-sm font-medium border transition-all min-w-[5rem]"
-                    style={{
-                      backgroundColor:
-                        period === p.value
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--secondary))",
-                      color:
-                        period === p.value
-                          ? "oklch(var(--primary-foreground))"
-                          : "oklch(var(--foreground))",
-                      borderColor:
-                        period === p.value
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--border))",
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              {period === "custom" && (
-                <div className="mt-2 space-y-2">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">
-                      Start Date
-                    </Label>
-                    <input
-                      type="date"
-                      value={customStartDate}
-                      onChange={(e) => setCustomStartDate(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">
-                      End Date
-                    </Label>
-                    <input
-                      type="date"
-                      value={customEndDate}
-                      min={customStartDate || undefined}
-                      onChange={(e) => setCustomEndDate(e.target.value)}
-                      className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div>
               <Label>{t("language")}</Label>
               <div className="flex gap-2 mt-1">
                 {(["en", "tl"] as Language[]).map((l) => (
@@ -250,7 +201,178 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
+        {/* Step 1: Period Mode selection */}
         {step === 1 && (
+          <div className="space-y-4">
+            {/* Period Mode */}
+            <button
+              type="button"
+              onClick={() => setPeriodMode("period")}
+              className="w-full p-4 rounded-2xl border-2 text-left transition-all"
+              style={{
+                borderColor:
+                  periodMode === "period"
+                    ? "oklch(var(--primary))"
+                    : "oklch(var(--border))",
+                backgroundColor:
+                  periodMode === "period"
+                    ? "oklch(var(--primary) / 0.08)"
+                    : "oklch(var(--card))",
+              }}
+              data-ocid="onboarding.period_mode.toggle"
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{
+                    backgroundColor:
+                      periodMode === "period"
+                        ? "oklch(var(--primary))"
+                        : "oklch(var(--secondary))",
+                  }}
+                >
+                  <span
+                    className="text-lg"
+                    style={{
+                      color:
+                        periodMode === "period"
+                          ? "oklch(var(--primary-foreground))"
+                          : "oklch(var(--muted-foreground))",
+                    }}
+                  >
+                    📅
+                  </span>
+                </div>
+                <div>
+                  <p className="font-bold text-foreground">Period Mode</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    I get paid on specific dates and want full control over my
+                    budget windows
+                  </p>
+                  {periodMode === "period" && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-xs font-medium text-foreground">
+                        {t("period")}
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        {PERIODS.map((p) => (
+                          <button
+                            type="button"
+                            key={p.value}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPeriod(p.value);
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+                            style={{
+                              backgroundColor:
+                                period === p.value
+                                  ? "oklch(var(--primary))"
+                                  : "oklch(var(--secondary))",
+                              color:
+                                period === p.value
+                                  ? "oklch(var(--primary-foreground))"
+                                  : "oklch(var(--foreground))",
+                              borderColor:
+                                period === p.value
+                                  ? "oklch(var(--primary))"
+                                  : "oklch(var(--border))",
+                            }}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                      {period === "custom" && (
+                        <div className="mt-2 space-y-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground">
+                              Start Date
+                            </Label>
+                            <input
+                              type="date"
+                              value={customStartDate}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) =>
+                                setCustomStartDate(e.target.value)
+                              }
+                              className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground">
+                              End Date
+                            </Label>
+                            <input
+                              type="date"
+                              value={customEndDate}
+                              min={customStartDate || undefined}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => setCustomEndDate(e.target.value)}
+                              className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-card text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </button>
+
+            {/* Monthly Mode */}
+            <button
+              type="button"
+              onClick={() => setPeriodMode("monthly")}
+              className="w-full p-4 rounded-2xl border-2 text-left transition-all"
+              style={{
+                borderColor:
+                  periodMode === "monthly"
+                    ? "oklch(var(--primary))"
+                    : "oklch(var(--border))",
+                backgroundColor:
+                  periodMode === "monthly"
+                    ? "oklch(var(--primary) / 0.08)"
+                    : "oklch(var(--card))",
+              }}
+              data-ocid="onboarding.monthly_mode.toggle"
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                  style={{
+                    backgroundColor:
+                      periodMode === "monthly"
+                        ? "oklch(var(--primary))"
+                        : "oklch(var(--secondary))",
+                  }}
+                >
+                  <span
+                    className="text-lg"
+                    style={{
+                      color:
+                        periodMode === "monthly"
+                          ? "oklch(var(--primary-foreground))"
+                          : "oklch(var(--muted-foreground))",
+                    }}
+                  >
+                    🗓
+                  </span>
+                </div>
+                <div>
+                  <p className="font-bold text-foreground">Monthly Mode</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Keep it simple — reset my budget every 1st of the month
+                    automatically
+                  </p>
+                </div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Step 2: Budget allocation */}
+        {step === 2 && (
           <div className="space-y-5">
             <p className="text-xs text-muted-foreground">
               Enter your preferred budget allocation. All three must add up to
@@ -338,7 +460,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </div>
         )}
 
-        {step === 2 && (
+        {/* Step 3: Review */}
+        {step === 3 && (
           <div className="space-y-3">
             {[
               { label: t("name"), value: name || "User" },
@@ -347,16 +470,30 @@ export function Onboarding({ onComplete }: OnboardingProps) {
                 value: `${currency} ${Number.parseFloat(salary || "0").toLocaleString()}`,
               },
               {
-                label: t("period"),
-                value: PERIODS.find((p) => p.value === period)?.label ?? period,
+                label: "Budget Mode",
+                value:
+                  periodMode === "monthly" ? "Monthly Mode" : "Period Mode",
               },
-              ...(period === "custom"
+              ...(periodMode === "period"
                 ? [
                     {
-                      label: "Start Date",
-                      value: customStartDate || "Not set",
+                      label: t("period"),
+                      value:
+                        PERIODS.find((p) => p.value === period)?.label ??
+                        period,
                     },
-                    { label: "End Date", value: customEndDate || "Not set" },
+                    ...(period === "custom"
+                      ? [
+                          {
+                            label: "Start Date",
+                            value: customStartDate || "Not set",
+                          },
+                          {
+                            label: "End Date",
+                            value: customEndDate || "Not set",
+                          },
+                        ]
+                      : []),
                   ]
                 : []),
               { label: t("needs"), value: `${needsPct}%` },
@@ -387,10 +524,10 @@ export function Onboarding({ onComplete }: OnboardingProps) {
               {t("back")}
             </Button>
           )}
-          {step < steps.length - 1 ? (
+          {step < totalSteps - 1 ? (
             <Button
               onClick={() => setStep((s) => s + 1)}
-              disabled={step === 1 && !isValidAllocation}
+              disabled={!canGoNext()}
               className="flex-1"
               style={{
                 backgroundColor: "oklch(var(--primary))",

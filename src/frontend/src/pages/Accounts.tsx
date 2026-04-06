@@ -35,12 +35,14 @@ import {
   Building2,
   CheckCircle2,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Circle,
   Clock,
   CreditCard,
   GripVertical,
   HandCoins,
+  Layers,
   MoreVertical,
   Pencil,
   Plus,
@@ -48,13 +50,14 @@ import {
   Smartphone,
   Trash2,
   Wallet,
+  X,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { HelpSheet } from "../components/HelpSheet";
 import { formatAmount } from "../data/categories";
 import { useFinanceData } from "../hooks/useFinanceData";
-import type { Account, AccountType, Bill, IOU } from "../types";
+import type { Account, AccountType, Bill, IOU, SubAccount } from "../types";
 
 const ACCOUNT_PRESETS: { name: string; type: AccountType; color: string }[] = [
   { name: "Cash", type: "cash", color: "#F2C94C" },
@@ -203,6 +206,9 @@ export function Accounts() {
     updateBill,
     deleteBill,
     toggleBillPaid,
+    addSubAccount,
+    editSubAccount,
+    deleteSubAccount,
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
 
@@ -217,6 +223,30 @@ export function Accounts() {
   });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editAccount, setEditAccount] = useState<Account | null>(null);
+
+  // Sub-account state
+  const [expandedSubAccounts, setExpandedSubAccounts] = useState<
+    Record<string, boolean>
+  >({});
+  const [showAddSubAccount, setShowAddSubAccount] = useState<string | null>(
+    null,
+  ); // parentId
+  const [editSubAccountState, setEditSubAccountState] = useState<{
+    parentId: string;
+    sub: SubAccount;
+  } | null>(null);
+  const [subAccountForm, setSubAccountForm] = useState({
+    name: "",
+    balance: "",
+    openingDate: format(new Date(), "yyyy-MM-dd"),
+    color: "#888888",
+  });
+  const [subAccountHistory, setSubAccountHistory] = useState<{
+    parentId: string;
+    subId: string;
+    name: string;
+  } | null>(null);
+
   // Drag-to-reorder state
   const dragIndex = useRef<number | null>(null);
   const dragOverIndex = useRef<number | null>(null);
@@ -969,6 +999,164 @@ export function Accounts() {
                       </button>
                     </div>
                   </div>
+
+                  {/* Sub-accounts section */}
+                  {(acc.subAccounts ?? []).length > 0 && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedSubAccounts((prev) => ({
+                            ...prev,
+                            [acc.id]: !prev[acc.id],
+                          }))
+                        }
+                        className="flex items-center gap-1.5 text-xs text-muted-foreground w-full px-2 py-1 rounded-lg transition-all"
+                        style={{
+                          backgroundColor: "oklch(var(--secondary) / 0.5)",
+                        }}
+                      >
+                        <Layers size={12} />
+                        <span>
+                          {(acc.subAccounts ?? []).length} sub-account
+                          {(acc.subAccounts ?? []).length !== 1 ? "s" : ""}
+                        </span>
+                        {expandedSubAccounts[acc.id] ? (
+                          <ChevronUp size={12} className="ml-auto" />
+                        ) : (
+                          <ChevronDown size={12} className="ml-auto" />
+                        )}
+                      </button>
+                      {expandedSubAccounts[acc.id] && (
+                        <div className="mt-2 pl-4 space-y-1.5">
+                          {(acc.subAccounts ?? []).map((sub) => {
+                            const lastTx = [...transactions]
+                              .filter(
+                                (t) => t.account === `${acc.id}>${sub.id}`,
+                              )
+                              .sort((a, b) => b.date.localeCompare(a.date))[0];
+                            return (
+                              <div
+                                key={sub.id}
+                                className="flex items-center gap-2 p-2.5 rounded-xl border border-border"
+                                style={{
+                                  backgroundColor:
+                                    "oklch(var(--secondary) / 0.3)",
+                                }}
+                              >
+                                <div
+                                  className="w-2 h-8 rounded-full flex-shrink-0"
+                                  style={{
+                                    backgroundColor:
+                                      sub.color ?? acc.color ?? "#888",
+                                  }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-foreground truncate">
+                                    {sub.name}
+                                  </p>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    {lastTx
+                                      ? `Last: ${format(parseISO(lastTx.date), "MMM d")}`
+                                      : "No activity"}
+                                  </p>
+                                </div>
+                                <span
+                                  className="text-sm font-bold flex-shrink-0"
+                                  style={{ color: "oklch(var(--primary))" }}
+                                >
+                                  {formatAmount(sub.balance, currency)}
+                                </span>
+                                <div className="flex gap-1 flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setSubAccountHistory({
+                                        parentId: acc.id,
+                                        subId: sub.id,
+                                        name: sub.name,
+                                      })
+                                    }
+                                    className="p-1 rounded text-muted-foreground"
+                                    style={{
+                                      backgroundColor:
+                                        "oklch(var(--secondary))",
+                                    }}
+                                    title="View history"
+                                  >
+                                    <Clock size={10} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditSubAccountState({
+                                        parentId: acc.id,
+                                        sub,
+                                      });
+                                      setSubAccountForm({
+                                        name: sub.name,
+                                        balance: sub.balance.toString(),
+                                        openingDate:
+                                          sub.openingDate ??
+                                          format(new Date(), "yyyy-MM-dd"),
+                                        color: sub.color ?? "#888888",
+                                      });
+                                    }}
+                                    className="p-1 rounded text-muted-foreground"
+                                    style={{
+                                      backgroundColor:
+                                        "oklch(var(--secondary))",
+                                    }}
+                                    title="Edit sub-account"
+                                  >
+                                    <Pencil size={10} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      deleteSubAccount(acc.id, sub.id);
+                                      toast.success(`${sub.name} deleted`);
+                                    }}
+                                    className="p-1 rounded"
+                                    style={{
+                                      backgroundColor: "#EB575722",
+                                      color: "#EB5757",
+                                    }}
+                                    title="Delete sub-account"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Add sub-account button */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddSubAccount(acc.id);
+                      setSubAccountForm({
+                        name: "",
+                        balance: "",
+                        openingDate: format(new Date(), "yyyy-MM-dd"),
+                        color: acc.color ?? "#888888",
+                      });
+                    }}
+                    className="mt-2 flex items-center gap-1 text-xs px-2 py-1 rounded-lg w-full"
+                    style={{
+                      backgroundColor: `${acc.color ?? "#888"}11`,
+                      color: acc.color ?? "oklch(var(--muted-foreground))",
+                    }}
+                    data-ocid={`accounts.sub_account.button.${idx + 1}`}
+                  >
+                    <Plus size={11} />
+                    Add sub-account
+                  </button>
                 </div>
               );
             })}
@@ -1692,6 +1880,242 @@ export function Accounts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add/Edit Sub-account Dialog */}
+      {(showAddSubAccount || editSubAccountState) && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div
+            className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto"
+            style={{ backgroundColor: "oklch(var(--card))" }}
+            data-ocid="accounts.sub_account.dialog"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-foreground">
+                {editSubAccountState ? "Edit Sub-account" : "Add Sub-account"}
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddSubAccount(null);
+                  setEditSubAccountState(null);
+                }}
+              >
+                <X size={18} className="text-muted-foreground" />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <Label className="text-xs">Name</Label>
+                <input
+                  type="text"
+                  value={subAccountForm.name}
+                  onChange={(e) =>
+                    setSubAccountForm((p) => ({ ...p, name: e.target.value }))
+                  }
+                  placeholder="e.g. Parked Funds"
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                  data-ocid="accounts.sub_account.input"
+                />
+              </div>
+              {!editSubAccountState && (
+                <>
+                  <div>
+                    <Label className="text-xs">
+                      Opening Balance (optional)
+                    </Label>
+                    <input
+                      type="number"
+                      value={subAccountForm.balance}
+                      onChange={(e) =>
+                        setSubAccountForm((p) => ({
+                          ...p,
+                          balance: e.target.value,
+                        }))
+                      }
+                      placeholder="0.00"
+                      min="0"
+                      className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                      data-ocid="accounts.sub_account.balance.input"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Opening Date</Label>
+                    <input
+                      type="date"
+                      value={subAccountForm.openingDate}
+                      onChange={(e) =>
+                        setSubAccountForm((p) => ({
+                          ...p,
+                          openingDate: e.target.value,
+                        }))
+                      }
+                      className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </>
+              )}
+              <div>
+                <Label className="text-xs">Color (optional)</Label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input
+                    type="color"
+                    value={subAccountForm.color}
+                    onChange={(e) =>
+                      setSubAccountForm((p) => ({
+                        ...p,
+                        color: e.target.value,
+                      }))
+                    }
+                    className="w-8 h-8 rounded cursor-pointer border border-border"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    {subAccountForm.color}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setShowAddSubAccount(null);
+                    setEditSubAccountState(null);
+                  }}
+                  data-ocid="accounts.sub_account.cancel_button"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => {
+                    const subName = subAccountForm.name.trim();
+                    if (!subName) {
+                      toast.error("Name is required");
+                      return;
+                    }
+                    if (editSubAccountState) {
+                      editSubAccount(
+                        editSubAccountState.parentId,
+                        editSubAccountState.sub.id,
+                        {
+                          name: subName,
+                          color: subAccountForm.color || undefined,
+                        },
+                      );
+                      toast.success("Sub-account updated");
+                      setEditSubAccountState(null);
+                    } else if (showAddSubAccount) {
+                      const openingBalance =
+                        Number.parseFloat(subAccountForm.balance) || 0;
+                      addSubAccount(showAddSubAccount, {
+                        name: subName,
+                        balance: openingBalance,
+                        openingBalance:
+                          openingBalance > 0 ? openingBalance : undefined,
+                        openingDate: subAccountForm.openingDate || undefined,
+                        color: subAccountForm.color || undefined,
+                      });
+                      toast.success(`${subName} added`);
+                      setShowAddSubAccount(null);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: "oklch(var(--primary))",
+                    color: "oklch(var(--primary-foreground))",
+                  }}
+                  data-ocid="accounts.sub_account.save_button"
+                >
+                  {editSubAccountState ? "Save" : "Add"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-account history sheet */}
+      {subAccountHistory &&
+        (() => {
+          const subTxKey = `${subAccountHistory.parentId}>${subAccountHistory.subId}`;
+          const subTxs = [...allAccountTransactions]
+            .filter((t) => t.account === subTxKey)
+            .sort((a, b) => b.date.localeCompare(a.date));
+          return (
+            <div
+              className="fixed inset-0 z-50 flex items-end justify-center"
+              style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+            >
+              <div
+                className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto"
+                style={{ backgroundColor: "oklch(var(--card))" }}
+                data-ocid="accounts.sub_account_history.sheet"
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-foreground">
+                      {subAccountHistory.name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      Sub-account history
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSubAccountHistory(null)}
+                  >
+                    <X size={18} className="text-muted-foreground" />
+                  </button>
+                </div>
+                {subTxs.length === 0 ? (
+                  <div
+                    className="text-center py-8"
+                    data-ocid="accounts.sub_account_history.empty_state"
+                  >
+                    <p className="text-muted-foreground text-sm">
+                      No transactions yet
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {subTxs.map((tx, i) => (
+                      <div
+                        key={tx.id}
+                        className="flex items-center justify-between p-3 rounded-xl"
+                        style={{ backgroundColor: "oklch(var(--secondary))" }}
+                        data-ocid={`accounts.sub_account_history.item.${i + 1}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-foreground truncate">
+                            {tx.description || tx.subCategory}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {format(parseISO(tx.date), "MMM d, yyyy")} ·{" "}
+                            {tx.mainCategory}
+                          </p>
+                        </div>
+                        <span
+                          className="text-sm font-bold ml-2 flex-shrink-0"
+                          style={{
+                            color:
+                              tx.type === "income"
+                                ? "oklch(var(--primary))"
+                                : "#EB5757",
+                          }}
+                        >
+                          {tx.type === "income" ? "+" : "-"}
+                          {formatAmount(tx.amount, currency)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
 
       {/* Add Account Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>

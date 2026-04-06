@@ -207,10 +207,19 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
       finalMainCategory = "Income";
     }
 
-    // Resolve account name for transaction record
-    const selectedAcc = selectedAccountId
-      ? accounts.find((a) => a.id === selectedAccountId)
-      : null;
+    // Resolve account field — supports both parent accounts and sub-accounts
+    // Sub-account format: "parentId>subId", stored as-is in transaction.account
+    let resolvedAccount: string | undefined = undefined;
+    if (selectedAccountId) {
+      if (selectedAccountId.includes(">")) {
+        // Sub-account: use the parentId>subId key directly as the account field
+        resolvedAccount = selectedAccountId;
+      } else {
+        // Parent account: resolve to account name
+        const selectedAcc = accounts.find((a) => a.id === selectedAccountId);
+        resolvedAccount = selectedAcc?.name;
+      }
+    }
 
     addTransaction({
       amount: num,
@@ -219,15 +228,19 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
       subCategory: finalSubCategory,
       description,
       type,
-      account: selectedAcc?.name ?? undefined,
+      account: resolvedAccount,
     });
 
     // Update account balance using the UUID directly (functional updater — no stale closure)
     if (selectedAccountId) {
+      // For sub-accounts, debit/credit the parent account balance
+      const parentId = selectedAccountId.includes(">")
+        ? selectedAccountId.split(">")[0]
+        : selectedAccountId;
       if (type === "income") {
-        creditAccount(selectedAccountId, num);
+        creditAccount(parentId, num);
       } else if (type === "expense") {
-        debitAccount(selectedAccountId, num);
+        debitAccount(parentId, num);
       }
     }
 
@@ -664,33 +677,68 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
                   None
                 </button>
                 {accounts.map((acc) => (
-                  <button
-                    type="button"
-                    key={acc.id}
-                    onClick={() =>
-                      setSelectedAccountId(
-                        selectedAccountId === acc.id ? "" : acc.id,
-                      )
-                    }
-                    className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
-                    style={{
-                      backgroundColor:
-                        selectedAccountId === acc.id
-                          ? "oklch(var(--primary) / 0.15)"
-                          : "transparent",
-                      borderColor:
-                        selectedAccountId === acc.id
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--border))",
-                      color:
-                        selectedAccountId === acc.id
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--foreground))",
-                    }}
-                    data-ocid="add_transaction.account.toggle"
-                  >
-                    {acc.name}
-                  </button>
+                  <div key={acc.id} className="flex flex-wrap gap-2">
+                    {/* Parent account button */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedAccountId(
+                          selectedAccountId === acc.id ? "" : acc.id,
+                        )
+                      }
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                      style={{
+                        backgroundColor:
+                          selectedAccountId === acc.id
+                            ? "oklch(var(--primary) / 0.15)"
+                            : "transparent",
+                        borderColor:
+                          selectedAccountId === acc.id
+                            ? "oklch(var(--primary))"
+                            : "oklch(var(--border))",
+                        color:
+                          selectedAccountId === acc.id
+                            ? "oklch(var(--primary))"
+                            : "oklch(var(--foreground))",
+                      }}
+                      data-ocid="add_transaction.account.toggle"
+                    >
+                      {acc.name}
+                    </button>
+                    {/* Sub-account buttons */}
+                    {(acc.subAccounts ?? []).map((sub) => {
+                      const subKey = `${acc.id}>${sub.id}`;
+                      return (
+                        <button
+                          type="button"
+                          key={sub.id}
+                          onClick={() =>
+                            setSelectedAccountId(
+                              selectedAccountId === subKey ? "" : subKey,
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                          style={{
+                            backgroundColor:
+                              selectedAccountId === subKey
+                                ? "oklch(var(--primary) / 0.15)"
+                                : "transparent",
+                            borderColor:
+                              selectedAccountId === subKey
+                                ? "oklch(var(--primary))"
+                                : "oklch(var(--border))",
+                            color:
+                              selectedAccountId === subKey
+                                ? "oklch(var(--primary))"
+                                : "oklch(var(--muted-foreground))",
+                          }}
+                          data-ocid="add_transaction.account.toggle"
+                        >
+                          {acc.name} &rsaquo; {sub.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             </div>

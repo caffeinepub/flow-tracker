@@ -1,6 +1,6 @@
 // Flow Tracker Service Worker
 // Cache version - increment this when deploying new versions to force cache refresh
-const CACHE_VERSION = 'flow-tracker-v1';
+const CACHE_VERSION = 'flow-tracker-v2';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 

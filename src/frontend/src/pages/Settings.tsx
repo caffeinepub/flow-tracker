@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  CalendarDays,
   ChevronDown,
   ChevronUp,
   Database,
@@ -32,6 +33,7 @@ import {
   Trash2,
   Upload,
   X,
+  Zap,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -48,6 +50,7 @@ import type {
   CustomCategory,
   CustomSubCategory,
   Language,
+  NextPeriodDraft,
   Theme,
 } from "../types";
 
@@ -88,6 +91,10 @@ export function Settings() {
     currentPeriodEnd,
     incomeSourceChips,
     updateIncomeSourceChips,
+    nextPeriodDraft,
+    saveNextPeriodDraft,
+    discardNextPeriodDraft,
+    activateNextPeriod,
   } = useFinanceData();
   const [lang, setLang] = useLocalStorage<Language>("sft_lang", "en");
 
@@ -104,6 +111,19 @@ export function Settings() {
   const [pendingRestoreFile, setPendingRestoreFile] = useState<string | null>(
     null,
   );
+
+  // Next Period Draft form state
+  const [showNextPeriodForm, setShowNextPeriodForm] = useState(false);
+  const [nextPeriodForm, setNextPeriodForm] = useState({
+    startDate: "",
+    endDate: "",
+    expectedIncome: "",
+  });
+
+  // Period Mode confirmation dialog
+  const [showModeSwitch, setShowModeSwitch] = useState<
+    "period" | "monthly" | null
+  >(null);
 
   // Income source chips state
   const [newChip, setNewChip] = useState("");
@@ -1173,6 +1193,65 @@ export function Settings() {
 
       {/* Period Management */}
       <Section title={t("periodManagement")}>
+        {/* Period Mode toggle */}
+        <div className="mb-4">
+          <Label className="text-xs mb-1.5 block">Budget Mode</Label>
+          <div
+            className="flex rounded-xl overflow-hidden border"
+            style={{ borderColor: "oklch(var(--border))" }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                if (config?.periodMode !== "period") {
+                  setShowModeSwitch("period");
+                }
+              }}
+              className="flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+              style={{
+                backgroundColor:
+                  (config?.periodMode ?? "period") === "period"
+                    ? "oklch(var(--primary))"
+                    : "transparent",
+                color:
+                  (config?.periodMode ?? "period") === "period"
+                    ? "oklch(var(--primary-foreground))"
+                    : "oklch(var(--muted-foreground))",
+              }}
+              data-ocid="settings.period_mode.toggle"
+            >
+              <CalendarDays size={12} /> Period Mode
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (config?.periodMode !== "monthly") {
+                  setShowModeSwitch("monthly");
+                }
+              }}
+              className="flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all"
+              style={{
+                backgroundColor:
+                  config?.periodMode === "monthly"
+                    ? "oklch(var(--primary))"
+                    : "transparent",
+                color:
+                  config?.periodMode === "monthly"
+                    ? "oklch(var(--primary-foreground))"
+                    : "oklch(var(--muted-foreground))",
+              }}
+              data-ocid="settings.monthly_mode.toggle"
+            >
+              <Zap size={12} /> Monthly Mode
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1">
+            {config?.periodMode === "monthly"
+              ? "Budget resets automatically every 1st of the month."
+              : "You control your budget start and end dates."}
+          </p>
+        </div>
+
         <div className="text-xs text-muted-foreground mb-3">
           {periods.length} archived period{periods.length !== 1 ? "s" : ""}
         </div>
@@ -1181,67 +1260,257 @@ export function Settings() {
             Current: {config.startDate} &rarr; {currentPeriodEnd}
           </div>
         )}
-        <div className="mb-3">
-          <Label className="text-xs">Period Type</Label>
-          <select
-            className="w-full mt-1 p-2 rounded-lg border border-border bg-card text-foreground text-sm"
-            value={config?.period ?? "monthly"}
-            onChange={(e) =>
-              setConfig((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      period: e.target.value as import("../types").Period,
-                    }
-                  : prev,
-              )
-            }
-            data-ocid="settings.period_type.select"
-          >
-            <option value="monthly">Monthly</option>
-            <option value="biweekly">Bi-weekly</option>
-            <option value="weekly">Weekly</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-        {config?.period === "custom" && (
+
+        {/* Only show period type and custom dates in Period mode */}
+        {(config?.periodMode ?? "period") === "period" && (
           <>
             <div className="mb-3">
-              <Label className="text-xs">Start Date</Label>
-              <Input
-                type="date"
-                value={config.customStartDate ?? config.startDate ?? ""}
+              <Label className="text-xs">Period Type</Label>
+              <select
+                className="w-full mt-1 p-2 rounded-lg border border-border bg-card text-foreground text-sm"
+                value={config?.period ?? "monthly"}
                 onChange={(e) =>
                   setConfig((prev) =>
                     prev
                       ? {
                           ...prev,
-                          customStartDate: e.target.value,
-                          startDate: e.target.value,
+                          period: e.target.value as import("../types").Period,
                         }
                       : prev,
                   )
                 }
-                className="mt-1"
-                data-ocid="settings.custom_start_date.input"
-              />
+                data-ocid="settings.period_type.select"
+              >
+                <option value="monthly">Monthly</option>
+                <option value="biweekly">Bi-weekly</option>
+                <option value="weekly">Weekly</option>
+                <option value="custom">Custom</option>
+              </select>
             </div>
-            <div className="mb-3">
-              <Label className="text-xs">End Date</Label>
-              <Input
-                type="date"
-                value={config.customEndDate ?? ""}
-                onChange={(e) =>
-                  setConfig((prev) =>
-                    prev ? { ...prev, customEndDate: e.target.value } : prev,
-                  )
-                }
-                className="mt-1"
-                data-ocid="settings.custom_end_date.input"
-              />
-            </div>
+            {config?.period === "custom" && (
+              <>
+                <div className="mb-3">
+                  <Label className="text-xs">Start Date</Label>
+                  <Input
+                    type="date"
+                    value={config.customStartDate ?? config.startDate ?? ""}
+                    onChange={(e) =>
+                      setConfig((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              customStartDate: e.target.value,
+                              startDate: e.target.value,
+                            }
+                          : prev,
+                      )
+                    }
+                    className="mt-1"
+                    data-ocid="settings.custom_start_date.input"
+                  />
+                </div>
+                <div className="mb-3">
+                  <Label className="text-xs">End Date</Label>
+                  <Input
+                    type="date"
+                    value={config.customEndDate ?? ""}
+                    onChange={(e) =>
+                      setConfig((prev) =>
+                        prev
+                          ? { ...prev, customEndDate: e.target.value }
+                          : prev,
+                      )
+                    }
+                    className="mt-1"
+                    data-ocid="settings.custom_end_date.input"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Next Period Planning — only in Period mode */}
+            {!nextPeriodDraft && (
+              <Button
+                variant="outline"
+                className="w-full gap-2 mb-3"
+                onClick={() => {
+                  setShowNextPeriodForm(true);
+                  setNextPeriodForm({
+                    startDate: "",
+                    endDate: "",
+                    expectedIncome: config?.salary?.toString() ?? "",
+                  });
+                }}
+                data-ocid="settings.plan_next_period.button"
+              >
+                <CalendarDays size={14} />
+                Plan Next Period
+              </Button>
+            )}
+
+            {/* Next period draft form */}
+            {showNextPeriodForm && !nextPeriodDraft && (
+              <div
+                className="p-3 rounded-xl border border-border mb-3"
+                style={{ backgroundColor: "oklch(var(--secondary) / 0.5)" }}
+              >
+                <p className="text-xs font-semibold text-foreground mb-2">
+                  Plan Next Period
+                </p>
+                <div className="space-y-2">
+                  <div>
+                    <Label className="text-xs">Start Date</Label>
+                    <Input
+                      type="date"
+                      value={nextPeriodForm.startDate}
+                      onChange={(e) =>
+                        setNextPeriodForm((p) => ({
+                          ...p,
+                          startDate: e.target.value,
+                        }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                      data-ocid="settings.next_period.start_date.input"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">End Date</Label>
+                    <Input
+                      type="date"
+                      value={nextPeriodForm.endDate}
+                      min={nextPeriodForm.startDate || undefined}
+                      onChange={(e) =>
+                        setNextPeriodForm((p) => ({
+                          ...p,
+                          endDate: e.target.value,
+                        }))
+                      }
+                      className="mt-1 h-8 text-sm"
+                      data-ocid="settings.next_period.end_date.input"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Expected Income</Label>
+                    <Input
+                      type="number"
+                      value={nextPeriodForm.expectedIncome}
+                      onChange={(e) =>
+                        setNextPeriodForm((p) => ({
+                          ...p,
+                          expectedIncome: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g. 19000"
+                      className="mt-1 h-8 text-sm"
+                      data-ocid="settings.next_period.income.input"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setShowNextPeriodForm(false)}
+                    data-ocid="settings.next_period.cancel_button"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      if (
+                        !nextPeriodForm.startDate ||
+                        !nextPeriodForm.endDate
+                      ) {
+                        toast.error("Start and end dates are required");
+                        return;
+                      }
+                      const income = Number.parseFloat(
+                        nextPeriodForm.expectedIncome,
+                      );
+                      if (!income || income <= 0) {
+                        toast.error("Valid expected income is required");
+                        return;
+                      }
+                      saveNextPeriodDraft({
+                        startDate: nextPeriodForm.startDate,
+                        endDate: nextPeriodForm.endDate,
+                        expectedIncome: income,
+                      });
+                      setShowNextPeriodForm(false);
+                      toast.success("Next period draft saved!");
+                    }}
+                    style={{
+                      backgroundColor: "oklch(var(--primary))",
+                      color: "oklch(var(--primary-foreground))",
+                    }}
+                    data-ocid="settings.next_period.save_button"
+                  >
+                    Save Draft
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Existing next period draft summary */}
+            {nextPeriodDraft && (
+              <div
+                className="p-3 rounded-xl border mb-3"
+                style={{
+                  borderColor: "oklch(var(--primary) / 0.4)",
+                  backgroundColor: "oklch(var(--primary) / 0.05)",
+                }}
+                data-ocid="settings.next_period.card"
+              >
+                <div className="flex items-center gap-1.5 mb-1">
+                  <CalendarDays
+                    size={12}
+                    style={{ color: "oklch(var(--primary))" }}
+                  />
+                  <p
+                    className="text-xs font-semibold"
+                    style={{ color: "oklch(var(--primary))" }}
+                  >
+                    Next Period Draft
+                  </p>
+                </div>
+                <p className="text-xs text-foreground">
+                  {nextPeriodDraft.startDate} → {nextPeriodDraft.endDate}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Income: ₱{nextPeriodDraft.expectedIncome.toLocaleString()}
+                </p>
+                <div className="flex gap-2 mt-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 text-xs h-7"
+                    onClick={discardNextPeriodDraft}
+                    style={{ borderColor: "#EB5757", color: "#EB5757" }}
+                    data-ocid="settings.next_period.discard_button"
+                  >
+                    Discard
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 text-xs h-7"
+                    onClick={activateNextPeriod}
+                    style={{
+                      backgroundColor: "oklch(var(--primary))",
+                      color: "oklch(var(--primary-foreground))",
+                    }}
+                    data-ocid="settings.next_period.activate_button"
+                  >
+                    Activate
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
+
         <Button
           variant="outline"
           className="w-full gap-2"
@@ -1252,6 +1521,59 @@ export function Settings() {
           {t("startNewPeriod")}
         </Button>
       </Section>
+
+      {/* Period Mode switch confirmation */}
+      {showModeSwitch && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+        >
+          <div
+            className="rounded-2xl p-5 mx-4 max-w-sm w-full"
+            style={{ backgroundColor: "oklch(var(--card))" }}
+            data-ocid="settings.mode_switch.dialog"
+          >
+            <h3 className="font-bold text-foreground mb-2">
+              Switch to {showModeSwitch === "monthly" ? "Monthly" : "Period"}{" "}
+              Mode?
+            </h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              {showModeSwitch === "monthly"
+                ? "Switching to Monthly Mode will use calendar months instead of custom dates. Your transaction history is preserved."
+                : "Switching to Period Mode lets you set custom start and end dates. Your transaction history is preserved."}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowModeSwitch(null)}
+                data-ocid="settings.mode_switch.cancel_button"
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  setConfig((prev) =>
+                    prev ? { ...prev, periodMode: showModeSwitch } : prev,
+                  );
+                  setShowModeSwitch(null);
+                  toast.success(
+                    `Switched to ${showModeSwitch === "monthly" ? "Monthly" : "Period"} Mode`,
+                  );
+                }}
+                style={{
+                  backgroundColor: "oklch(var(--primary))",
+                  color: "oklch(var(--primary-foreground))",
+                }}
+                data-ocid="settings.mode_switch.confirm_button"
+              >
+                Switch
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Data Backup Section */}
       <Section title="Data Backup">

@@ -22,7 +22,6 @@ function parseAmount(text: string): string {
     /\b(grand\s*total|total\s*amount|total|subtotal|amount\s*due|amount)\b/i;
   for (const line of lines) {
     if (totalKeywords.test(line)) {
-      // Extract currency number from this line
       const match = line.match(
         /[₱P]?\s*([0-9]{1,3}(?:[,][0-9]{3})*(?:\.[0-9]{1,2})|[0-9]+(?:\.[0-9]{1,2}))/,
       );
@@ -50,8 +49,37 @@ function parseAmount(text: string): string {
 }
 
 function parseDate(text: string): string {
-  // MM/DD/YYYY or DD/MM/YYYY
-  const slashMatch = text.match(
+  // Strip time portions like ", 09:31 AM" or " 09:31" before matching dates
+  const cleaned = text.replace(
+    /[,\s]+\d{1,2}:\d{2}(:\d{2})?(\s*(AM|PM))?/gi,
+    " ",
+  );
+
+  // ── Dash-separated formats ────────────────────────────────────────────────
+
+  // MM-DD-YYYY or DD-MM-YYYY (4-digit year)
+  const dashFullMatch = cleaned.match(
+    /\b(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])-(20[0-9]{2})\b/,
+  );
+  if (dashFullMatch) {
+    const [, m, d, y] = dashFullMatch;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // MM-DD-YY (2-digit year, e.g. 04-06-26)
+  const dashShortMatch = cleaned.match(
+    /\b(0?[1-9]|1[0-2])-(0?[1-9]|[12][0-9]|3[01])-(\d{2})\b/,
+  );
+  if (dashShortMatch) {
+    const [, m, d, yy] = dashShortMatch;
+    const fullYear = `20${yy}`;
+    return `${fullYear}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // ── Slash-separated formats ───────────────────────────────────────────────
+
+  // MM/DD/YYYY
+  const slashMatch = cleaned.match(
     /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12][0-9]|3[01])\/(20[0-9]{2})\b/,
   );
   if (slashMatch) {
@@ -59,15 +87,24 @@ function parseDate(text: string): string {
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
   }
 
-  // YYYY-MM-DD
-  const isoMatch = text.match(
+  // MM/DD/YY (2-digit year)
+  const slashShortMatch = cleaned.match(
+    /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12][0-9]|3[01])\/(\d{2})\b/,
+  );
+  if (slashShortMatch) {
+    const [, m, d, yy] = slashShortMatch;
+    return `20${yy}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+
+  // ── ISO format YYYY-MM-DD ─────────────────────────────────────────────────
+  const isoMatch = cleaned.match(
     /\b(20[0-9]{2})-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])\b/,
   );
   if (isoMatch) {
     return isoMatch[0];
   }
 
-  // Month DD, YYYY or Month DD YYYY
+  // ── Written month formats (e.g. April 6, 2026 / 06 Apr 2026) ─────────────
   const months: Record<string, string> = {
     january: "01",
     february: "02",
@@ -94,7 +131,9 @@ function parseDate(text: string): string {
     dec: "12",
   };
   const monthNames = Object.keys(months).join("|");
-  const longMatch = text.match(
+
+  // Month DD, YYYY or Month DD YYYY
+  const longMatch = cleaned.match(
     new RegExp(
       `\\b(${monthNames})\\s+(0?[1-9]|[12][0-9]|3[01])[,\\s]+(20[0-9]{2})\\b`,
       "i",
@@ -107,19 +146,46 @@ function parseDate(text: string): string {
     return `${yr}-${mon}-${day}`;
   }
 
+  // DD Month YYYY (e.g. 06 Apr 2026)
+  const dmyMatch = cleaned.match(
+    new RegExp(
+      `\\b(0?[1-9]|[12][0-9]|3[01])\\s+(${monthNames})\\s+(20[0-9]{2})\\b`,
+      "i",
+    ),
+  );
+  if (dmyMatch) {
+    const day = dmyMatch[1].padStart(2, "0");
+    const mon = months[dmyMatch[2].toLowerCase()];
+    const yr = dmyMatch[3];
+    return `${yr}-${mon}-${day}`;
+  }
+
   return "";
 }
 
 function parseMerchant(text: string): string {
-  const lines = text
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 2 && !/^[0-9\s\W]+$/.test(l)); // skip lines that are only numbers/symbols
+  const lines = text.split("\n").map((l) => l.trim());
 
-  if (lines.length === 0) return "";
+  // Filter lines that are meaningful (not pure numbers/symbols/whitespace, min 3 chars)
+  const isAddressOrPhone = (l: string) =>
+    /^\d[\d\s\-().+#,]+$/.test(l) || // phone / number
+    /^(tel|fax|phone|mobile|email|www|http)/i.test(l) || // contact info
+    /(st\.|ave\.|blvd\.|road|street|floor|bldg|building|unit|lot|block)/i.test(
+      l,
+    ); // address
 
-  // Take first 1-2 meaningful lines, join them, trim to 50 chars
-  const candidate = lines.slice(0, 2).join(" ").trim();
+  const meaningfulLines = lines.filter(
+    (l) =>
+      l.length >= 3 &&
+      !/^[0-9\s\W]+$/.test(l) && // skip lines that are only numbers/symbols
+      !isAddressOrPhone(l),
+  );
+
+  if (meaningfulLines.length === 0) return "";
+
+  // Take the first meaningful line as the merchant name
+  // (receipts always print store name at the very top)
+  const candidate = meaningfulLines[0].trim();
   return candidate.slice(0, 50);
 }
 
@@ -132,14 +198,12 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!fileInputRef.current) return;
-    // Reset input so the same file can be re-selected
     fileInputRef.current.value = "";
     if (!file) return;
 
     setProcessing(true);
 
     try {
-      // Dynamically import tesseract to avoid bloating initial bundle
       const { createWorker } = await import("tesseract.js");
       const worker = await createWorker("eng");
 
@@ -148,9 +212,6 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
       } = await worker.recognize(file);
 
       await worker.terminate();
-
-      // Image is a File object — no object URL was created, so nothing to revoke.
-      // The `file` reference will be GC'd normally.
 
       const amount = parseAmount(text);
       const date = parseDate(text);
@@ -174,7 +235,6 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
 
   return (
     <>
-      {/* Hidden file input — capture="environment" opens rear camera on mobile */}
       <input
         ref={fileInputRef}
         type="file"
@@ -185,7 +245,6 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
         data-ocid="receipt_scanner.upload_button"
       />
 
-      {/* Camera trigger button */}
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
@@ -201,7 +260,6 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
         <Camera size={18} className="text-foreground" />
       </button>
 
-      {/* Full-screen processing overlay */}
       {processing && (
         <div
           className="fixed inset-0 flex flex-col items-center justify-center gap-4 z-[9999]"

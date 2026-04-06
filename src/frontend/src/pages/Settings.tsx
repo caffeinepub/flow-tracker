@@ -2143,82 +2143,117 @@ export function Settings() {
                 name: "Dashboard",
                 desc:
                   config?.language === "tl"
-                    ? "Pangkalahatang-ideya ng badyet, natitirang balanse, pag-unlad ng goal"
-                    : "Budget overview, remaining balance, goal progress",
-              },
-              {
-                name: "Accounts",
-                desc:
-                  config?.language === "tl"
-                    ? "Pamahalaan ang mga bank account, e-wallet, credit card, sub-account"
-                    : "Manage bank accounts, e-wallets, credit cards, sub-accounts",
+                    ? "Buod ng badyet, natitirang balanse, pag-unlad ng goal, privacy mode"
+                    : "Budget overview, remaining balance, goal progress, privacy mode",
               },
               {
                 name: "Add Transaction",
                 desc:
                   config?.language === "tl"
-                    ? "I-log ang kita, gastos, transfer, save to goal"
-                    : "Log income, expenses, transfers, save to goal",
+                    ? "I-log ang kita, gastos, transfer, save to goal; built-in calculator; split expense; i-scan ang resibo"
+                    : "Log income, expenses, transfers, save to goal; built-in calculator; split expense; receipt scanner",
+              },
+              {
+                name: "Receipt Scanner",
+                desc:
+                  config?.language === "tl"
+                    ? "I-scan ang resibo gamit ang camera o pumili ng larawan mula sa gallery; offline OCR; pre-fills ang form"
+                    : "Scan receipts using camera or choose from gallery; offline OCR; pre-fills the transaction form",
+              },
+              {
+                name: "Split Expense",
+                desc:
+                  config?.language === "tl"
+                    ? "I-split ang gastos; i-log lamang ang iyong bahagi; awtomatikong lumilikha ng IOU para sa ibang tao"
+                    : "Split a bill; logs only your share; auto-creates an IOU for the other person",
+              },
+              {
+                name: "Accounts",
+                desc:
+                  config?.language === "tl"
+                    ? "Mga bank account, e-wallet, credit card, sub-account; kasaysayan ng transaksyon na maaaring i-edit"
+                    : "Bank accounts, e-wallets, credit cards, sub-accounts; editable transaction history",
               },
               {
                 name: "Recurring",
                 desc:
                   config?.language === "tl"
-                    ? "Mga awtomatikong transaksyon sa iskedyul"
-                    : "Automatic transactions on a schedule",
+                    ? "Mga awtomatikong transaksyon sa iskedyul; pinakamainam para sa fixed na buwanang bayarin"
+                    : "Automatic transactions on a schedule; best for fixed monthly bills",
               },
               {
                 name: "Bill Tracker",
                 desc:
                   config?.language === "tl"
-                    ? "Subaybayan ang mga bayarin na may due date at paid/unpaid na katayuan"
-                    : "Track bills with due dates and paid/unpaid status",
+                    ? "Checklist ng bayarin na may due date at paid/unpaid na katayuan; mga alerto"
+                    : "Bill checklist with due dates and paid/unpaid status; due date alerts",
               },
               {
                 name: "IOU Tracker",
                 desc:
                   config?.language === "tl"
-                    ? "Subaybayan ang perang pinagkautangan at inutang"
-                    : "Track money lent and borrowed",
+                    ? "Subaybayan ang perang pinagkautangan at inutang; na-edit ang halaga at due date; naka-link sa split expenses"
+                    : "Track money lent and borrowed; editable amount and due date; linked to split expenses",
               },
               {
                 name: "History",
                 desc:
                   config?.language === "tl"
-                    ? "Kumpletong talaan ng transaksyon na may paghahanap, filter, at CSV export"
-                    : "Full transaction log with search, filter, and CSV export",
+                    ? "Kumpletong talaan ng transaksyon; paghahanap, filter, CSV export; pag-edit ay nagse-sync sa linked na IOU"
+                    : "Full transaction log; search, filter, CSV export; edits sync with linked IOUs",
               },
               {
                 name: "Reports",
                 desc:
                   config?.language === "tl"
-                    ? "Buodang year-to-date na may kategorya na breakdown"
-                    : "Year-to-date summaries with category breakdown",
+                    ? "Year-to-date na buod na may kategorya na breakdown; opening balances ay hindi kasama sa kita"
+                    : "Year-to-date summaries with category breakdown; opening balances excluded from income",
               },
               {
                 name: "Projections",
                 desc:
                   config?.language === "tl"
-                    ? "Mga savings goal at projeksyon sa hinaharap"
-                    : "Savings goals and future projections",
+                    ? "Mga savings goal at proyeksyon sa hinaharap; scenario sliders; lahat ay kinakalkula nang lokal"
+                    : "Savings goals and future projections; scenario sliders; all calculated locally in your browser",
+              },
+              {
+                name: "Next Period Plan",
+                desc:
+                  config?.language === "tl"
+                    ? "Mag-plano ng mga alokasyon para sa susunod na panahon habang aktibo pa ang kasalukuyan"
+                    : "Plan allocations for the next period while the current one is still active",
               },
               {
                 name: "Notes",
                 desc:
                   config?.language === "tl"
-                    ? "Mga libreng tala na may checklist"
-                    : "Free-form notes with checklists",
+                    ? "Mga libreng tala na may checklist, mga color tag, at paghahanap"
+                    : "Free-form notes with checklists, color tags, and search",
+              },
+              {
+                name: "Privacy Mode",
+                desc:
+                  config?.language === "tl"
+                    ? "Eye icon sa header; nagtatago ng lahat ng halaga; nire-reset sa unblurred sa bawat pagbubukas ng app"
+                    : "Eye icon in header; hides all amounts; resets to unblurred each time you open the app",
+              },
+              {
+                name: "PIN Lock",
+                desc:
+                  config?.language === "tl"
+                    ? "6-digit PIN; kinakailangan sa pagbubukas at pagkatapos ng 5 minuto ng katahimikan; ang pagkalimot ay nangangailangan ng full data wipe"
+                    : "6-digit PIN; required on open and after 5 min inactivity; forgetting requires full data wipe",
               },
               {
                 name: "Settings",
                 desc:
                   config?.language === "tl"
-                    ? "Kategorya, account, panahon, backup/restore, at marami pa"
-                    : "Categories, accounts, period, backup/restore, and more",
+                    ? "Kategorya, account, panahon, backup/restore, update app, at marami pa"
+                    : "Categories, accounts, period, backup/restore, update app, and more",
               },
             ].map(({ name, desc }) => (
               <div key={name} className="flex gap-2">
-                <span className="text-xs font-semibold text-foreground min-w-[100px]">
+                <span className="text-xs font-semibold text-foreground min-w-[110px]">
                   {name}
                 </span>
                 <span className="text-xs text-muted-foreground">— {desc}</span>

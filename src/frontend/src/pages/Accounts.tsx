@@ -93,6 +93,14 @@ function getUtilColor(pct: number): string {
   return "#EB5757";
 }
 
+function getAccountTotal(acc: Account): number {
+  const subTotal = (acc.subAccounts ?? []).reduce(
+    (s, sub) => s + sub.balance,
+    0,
+  );
+  return acc.balance + subTotal;
+}
+
 interface AddAccountForm {
   preset: string;
   customName: string;
@@ -451,12 +459,13 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
 
   // Net worth calculation
   const totalAssets = accounts
-    .filter((a) => a.type !== "credit" && a.balance > 0)
-    .reduce((s, a) => s + a.balance, 0);
+    .filter((a) => a.type !== "credit" && getAccountTotal(a) > 0)
+    .reduce((s, a) => s + getAccountTotal(a), 0);
   const totalLiabilities =
     accounts
       .filter((a) => a.type === "credit")
-      .reduce((s, a) => s + Math.abs(a.balance), 0) + totalIOUsBorrowed;
+      .reduce((s, a) => s + Math.abs(getAccountTotal(a)), 0) +
+    totalIOUsBorrowed;
   const netWorth = totalAssets + totalIOUsOwed - totalLiabilities;
 
   // Transfer history
@@ -929,7 +938,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               const Icon = TYPE_ICONS[acc.type];
               const utilPct =
                 acc.type === "credit" && acc.creditLimit
-                  ? (acc.balance / acc.creditLimit) * 100
+                  ? (getAccountTotal(acc) / acc.creditLimit) * 100
                   : null;
               const utilColor = utilPct !== null ? getUtilColor(utilPct) : null;
               const isDueSoon = (() => {
@@ -1009,7 +1018,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                           }}
                         >
                           {acc.type === "credit" ? "-" : ""}
-                          {pAmt(Math.abs(acc.balance))}
+                          {pAmt(Math.abs(getAccountTotal(acc)))}
                         </span>
                         {acc.type === "credit" && acc.creditLimit && (
                           <span className="text-xs text-muted-foreground">
@@ -2783,7 +2792,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                 <SelectContent>
                   {accounts.flatMap((acc) => [
                     <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name} ({pAmt(acc.balance)})
+                      {acc.name} ({pAmt(getAccountTotal(acc))})
                     </SelectItem>,
                     ...(acc.subAccounts ?? []).map((sub) => (
                       <SelectItem
@@ -2814,7 +2823,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                 <SelectContent>
                   {accounts.flatMap((acc) => [
                     <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name} ({pAmt(acc.balance)})
+                      {acc.name} ({pAmt(getAccountTotal(acc))})
                     </SelectItem>,
                     ...(acc.subAccounts ?? []).map((sub) => (
                       <SelectItem
@@ -3474,7 +3483,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                   <SelectContent>
                     {accounts.map((acc) => (
                       <SelectItem key={acc.id} value={acc.id}>
-                        {acc.name} ({pAmt(acc.balance)})
+                        {acc.name} ({pAmt(getAccountTotal(acc))})
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -1,4 +1,4 @@
-import { Camera, Loader2, Lock } from "lucide-react";
+import { Camera, FolderOpen, ImagePlus, Loader2, Lock, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -189,43 +189,81 @@ function parseMerchant(text: string): string {
   return candidate.slice(0, 50);
 }
 
+async function runOCR(
+  file: File,
+  onScanComplete: (result: ReceiptScanResult) => void,
+) {
+  // Load Tesseract.js from CDN for offline-first PWA compatibility
+  const w = window as unknown as {
+    Tesseract?: { createWorker: (...args: any[]) => any };
+  };
+  const Tesseract = await (w.Tesseract
+    ? Promise.resolve(w.Tesseract)
+    : new Promise<any>((resolve, reject) => {
+        if (document.querySelector("script[data-tesseract]")) {
+          // Already loading — wait for it
+          const interval = setInterval(() => {
+            if (w.Tesseract) {
+              clearInterval(interval);
+              resolve(w.Tesseract);
+            }
+          }, 100);
+          return;
+        }
+        const script = document.createElement("script");
+        script.setAttribute("data-tesseract", "1");
+        script.src =
+          "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+        script.onload = () => resolve(w.Tesseract);
+        script.onerror = reject;
+        document.head.appendChild(script);
+      }));
+  const { createWorker } = Tesseract;
+  const worker = await createWorker("eng");
+
+  const {
+    data: { text },
+  } = await worker.recognize(file);
+
+  await worker.terminate();
+
+  const amount = parseAmount(text);
+  const date = parseDate(text);
+  const description = parseMerchant(text);
+
+  onScanComplete({ amount, date, description });
+
+  if (!amount && !date && !description) {
+    toast.warning(
+      "Receipt scanned but no data could be extracted. Please fill in manually.",
+    );
+  } else {
+    toast.success("Receipt scanned! Review the pre-filled form.");
+  }
+}
+
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [processing, setProcessing] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!fileInputRef.current) return;
-    fileInputRef.current.value = "";
+    // Reset the input so the same file can be selected again
+    if (e.target === cameraInputRef.current && cameraInputRef.current)
+      cameraInputRef.current.value = "";
+    if (e.target === galleryInputRef.current && galleryInputRef.current)
+      galleryInputRef.current.value = "";
     if (!file) return;
 
+    setShowMenu(false);
     setProcessing(true);
 
     try {
-      const { createWorker } = await import("tesseract.js");
-      const worker = await createWorker("eng");
-
-      const {
-        data: { text },
-      } = await worker.recognize(file);
-
-      await worker.terminate();
-
-      const amount = parseAmount(text);
-      const date = parseDate(text);
-      const description = parseMerchant(text);
-
-      onScanComplete({ amount, date, description });
-
-      if (!amount && !date && !description) {
-        toast.warning(
-          "Receipt scanned but no data could be extracted. Please fill in manually.",
-        );
-      } else {
-        toast.success("Receipt scanned! Review the pre-filled form.");
-      }
+      await runOCR(file, onScanComplete);
     } catch (_err) {
       toast.error("OCR failed. Please fill in the form manually.");
     } finally {
@@ -235,19 +273,31 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
 
   return (
     <>
+      {/* Hidden camera input (capture=environment = rear camera) */}
       <input
-        ref={fileInputRef}
+        ref={cameraInputRef}
         type="file"
         accept="image/*"
         capture="environment"
         className="hidden"
         onChange={handleFileChange}
-        data-ocid="receipt_scanner.upload_button"
+        data-ocid="receipt_scanner.camera_input"
       />
 
+      {/* Hidden gallery/file input (no capture attribute = opens gallery/file picker) */}
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+        data-ocid="receipt_scanner.gallery_input"
+      />
+
+      {/* Trigger button */}
       <button
         type="button"
-        onClick={() => fileInputRef.current?.click()}
+        onClick={() => setShowMenu(true)}
         disabled={processing}
         aria-label="Scan receipt"
         className="flex items-center justify-center w-10 h-10 rounded-full transition-all active:scale-95 shadow-md"
@@ -260,6 +310,109 @@ export function ReceiptScanner({ onScanComplete }: ReceiptScannerProps) {
         <Camera size={18} className="text-foreground" />
       </button>
 
+      {/* Source picker bottom sheet */}
+      {showMenu && !processing && (
+        <div
+          className="fixed inset-0 z-[9998] flex flex-col justify-end"
+          style={{ backgroundColor: "oklch(var(--background) / 0.7)" }}
+          onClick={() => setShowMenu(false)}
+          onKeyDown={(e) => e.key === "Escape" && setShowMenu(false)}
+          role="presentation"
+          data-ocid="receipt_scanner.menu_overlay"
+        >
+          <div
+            className="rounded-t-2xl border-t border-border pb-safe p-4 space-y-2"
+            style={{ backgroundColor: "oklch(var(--card))" }}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Scan Receipt
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Choose image source
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowMenu(false)}
+                className="w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ backgroundColor: "oklch(var(--muted))" }}
+                aria-label="Close"
+              >
+                <X size={14} className="text-muted-foreground" />
+              </button>
+            </div>
+
+            {/* Camera option */}
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors active:scale-[0.98] text-left"
+              style={{ backgroundColor: "oklch(var(--secondary))" }}
+              data-ocid="receipt_scanner.use_camera"
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: "oklch(var(--primary) / 0.15)" }}
+              >
+                <Camera size={18} style={{ color: "oklch(var(--primary))" }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Take Photo
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Use camera to capture receipt
+                </p>
+              </div>
+            </button>
+
+            {/* Gallery option */}
+            <button
+              type="button"
+              onClick={() => galleryInputRef.current?.click()}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors active:scale-[0.98] text-left"
+              style={{ backgroundColor: "oklch(var(--secondary))" }}
+              data-ocid="receipt_scanner.use_gallery"
+            >
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ backgroundColor: "oklch(var(--primary) / 0.15)" }}
+              >
+                <ImagePlus
+                  size={18}
+                  style={{ color: "oklch(var(--primary))" }}
+                />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Choose from Gallery
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Select an existing photo from your phone
+                </p>
+              </div>
+            </button>
+
+            {/* Privacy note */}
+            <div
+              className="flex items-center gap-2 rounded-xl px-3 py-2 mt-1"
+              style={{ backgroundColor: "oklch(var(--muted))" }}
+            >
+              <Lock size={11} style={{ color: "oklch(var(--primary))" }} />
+              <p className="text-[11px] text-muted-foreground">
+                Processing is done locally — photo never leaves your device
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Processing overlay */}
       {processing && (
         <div
           className="fixed inset-0 flex flex-col items-center justify-center gap-4 z-[9999]"

@@ -72,6 +72,19 @@ export function AddTransaction({
 
   const mainCat = subCategory ? getMainCatForSub(subCategory) : null;
 
+  // Helper: resolve display name for an account or sub-account key
+  const resolveAccountName = (id: string): string => {
+    if (id.includes(">")) {
+      const [parentId, subId] = id.split(">");
+      const parent = accounts.find((a) => a.id === parentId);
+      const sub = (parent?.subAccounts ?? []).find((s) => s.id === subId);
+      return parent && sub
+        ? `${parent.name} › ${sub.name}`
+        : (parent?.name ?? "");
+    }
+    return accounts.find((a) => a.id === id)?.name ?? "";
+  };
+
   useEffect(() => {
     if (type === "expense" && description.length >= 2) {
       const suggestion = suggestCategory(description);
@@ -84,6 +97,18 @@ export function AddTransaction({
       setShowSuggestion(null);
     }
   }, [description, subCategory, type]);
+
+  // Auto-pre-fill account from goal's linked account when a goal is selected
+  useEffect(() => {
+    if (type === "saveToGoal" && selectedGoalId) {
+      const goal = goals.find((g) => g.id === selectedGoalId);
+      if (goal?.alreadySavedAccountId) {
+        setSelectedAccountId(
+          (prev) => prev || goal.alreadySavedAccountId || "",
+        );
+      }
+    }
+  }, [selectedGoalId, type, goals]);
 
   // Calculator evaluation helper
   function evalCalc(expr: string): number {
@@ -134,11 +159,6 @@ export function AddTransaction({
         toast.error("Please select a goal");
         return;
       }
-      if (!selectedAccountId) {
-        toast.error("From Account is required");
-        return;
-      }
-
       const selectedGoal = goals.find((g) => g.id === selectedGoalId);
       if (!selectedGoal) {
         toast.error("Goal not found");
@@ -168,10 +188,12 @@ export function AddTransaction({
         }
       }
 
-      const fromAcc = accounts.find((a) => a.id === selectedAccountId);
-      const toAcc = toAccountId
-        ? accounts.find((a) => a.id === toAccountId)
-        : null;
+      const fromAccName = selectedAccountId
+        ? resolveAccountName(selectedAccountId)
+        : undefined;
+      const toAccName = toAccountId
+        ? resolveAccountName(toAccountId)
+        : undefined;
       const goalLabel = selectedGoal.label || selectedGoal.subCategoryName;
 
       // Ensure parentCatName is never empty and never "Transfer"
@@ -179,8 +201,7 @@ export function AddTransaction({
         parentCatName = customCategories[0]?.name ?? "Savings";
       }
 
-      // 1. Log the goal expense transaction FIRST (tracks budget + goal progress)
-      // This must be logged before onDone() is called
+      // 1. Log the goal expense transaction
       addTransaction({
         amount: num,
         date,
@@ -188,23 +209,25 @@ export function AddTransaction({
         mainCategory: parentCatName,
         subCategory: selectedGoal.subCategoryName,
         description: description || `Saved to ${goalLabel}`,
-        account: fromAcc?.name,
+        account: fromAccName,
       });
 
-      // 2. Debit from-account
-      debitAccount(selectedAccountId, num);
+      // 2. Debit from-account (supports sub-account composite keys)
+      if (selectedAccountId) {
+        debitAccount(selectedAccountId, num);
+      }
 
-      // 3. Credit to-account if different from from-account
-      if (toAccountId && toAccountId !== selectedAccountId && toAcc) {
+      // 3. Credit to-account if different
+      if (toAccountId && toAccountId !== selectedAccountId && toAccName) {
         creditAccount(toAccountId, num);
       }
 
-      // 4. Log transfer records for history if accounts differ
+      // 4. Log transfer records if accounts differ
       if (
         toAccountId &&
         toAccountId !== selectedAccountId &&
-        toAcc &&
-        fromAcc
+        toAccName &&
+        fromAccName
       ) {
         addTransaction({
           amount: num,
@@ -212,8 +235,8 @@ export function AddTransaction({
           type: "expense",
           mainCategory: "Transfer",
           subCategory: "",
-          description: `Transfer to ${toAcc.name} – Goal: ${goalLabel}`,
-          account: fromAcc.name,
+          description: `Transfer to ${toAccName} – Goal: ${goalLabel}`,
+          account: fromAccName,
         });
         addTransaction({
           amount: num,
@@ -221,8 +244,8 @@ export function AddTransaction({
           type: "income",
           mainCategory: "Transfer",
           subCategory: "",
-          description: `Transfer from ${fromAcc.name} – Goal: ${goalLabel}`,
-          account: toAcc.name,
+          description: `Transfer from ${fromAccName} – Goal: ${goalLabel}`,
+          account: toAccName,
         });
       }
 
@@ -658,40 +681,96 @@ export function AddTransaction({
               </div>
             </div>
 
-            {/* From Account — required */}
+            {/* From Account — optional */}
             <div className="mb-4">
               <Label>
-                From Account <span className="text-destructive">*</span>
+                From Account{" "}
+                <span className="text-muted-foreground text-xs font-normal">
+                  (optional)
+                </span>
               </Label>
               <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAccountId("")}
+                  className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                  style={{
+                    backgroundColor:
+                      selectedAccountId === "" ? "#8B5CF622" : "transparent",
+                    borderColor:
+                      selectedAccountId === ""
+                        ? "#8B5CF6"
+                        : "oklch(var(--border))",
+                    color:
+                      selectedAccountId === ""
+                        ? "#8B5CF6"
+                        : "oklch(var(--muted-foreground))",
+                  }}
+                  data-ocid="add_transaction.from_account.toggle"
+                >
+                  None
+                </button>
                 {accounts.map((acc) => (
-                  <button
-                    type="button"
-                    key={acc.id}
-                    onClick={() =>
-                      setSelectedAccountId(
-                        selectedAccountId === acc.id ? "" : acc.id,
-                      )
-                    }
-                    className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
-                    style={{
-                      backgroundColor:
-                        selectedAccountId === acc.id
-                          ? "#8B5CF622"
-                          : "transparent",
-                      borderColor:
-                        selectedAccountId === acc.id
-                          ? "#8B5CF6"
-                          : "oklch(var(--border))",
-                      color:
-                        selectedAccountId === acc.id
-                          ? "#8B5CF6"
-                          : "oklch(var(--foreground))",
-                    }}
-                    data-ocid="add_transaction.from_account.toggle"
-                  >
-                    {acc.name}
-                  </button>
+                  <div key={acc.id} className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedAccountId(
+                          selectedAccountId === acc.id ? "" : acc.id,
+                        )
+                      }
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                      style={{
+                        backgroundColor:
+                          selectedAccountId === acc.id
+                            ? "#8B5CF622"
+                            : "transparent",
+                        borderColor:
+                          selectedAccountId === acc.id
+                            ? "#8B5CF6"
+                            : "oklch(var(--border))",
+                        color:
+                          selectedAccountId === acc.id
+                            ? "#8B5CF6"
+                            : "oklch(var(--foreground))",
+                      }}
+                      data-ocid="add_transaction.from_account.toggle"
+                    >
+                      {acc.name}
+                    </button>
+                    {(acc.subAccounts ?? []).map((sub) => {
+                      const subKey = `${acc.id}>${sub.id}`;
+                      return (
+                        <button
+                          type="button"
+                          key={sub.id}
+                          onClick={() =>
+                            setSelectedAccountId(
+                              selectedAccountId === subKey ? "" : subKey,
+                            )
+                          }
+                          className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                          style={{
+                            backgroundColor:
+                              selectedAccountId === subKey
+                                ? "#8B5CF622"
+                                : "transparent",
+                            borderColor:
+                              selectedAccountId === subKey
+                                ? "#8B5CF6"
+                                : "oklch(var(--border))",
+                            color:
+                              selectedAccountId === subKey
+                                ? "#8B5CF6"
+                                : "oklch(var(--muted-foreground))",
+                          }}
+                          data-ocid="add_transaction.from_account.toggle"
+                        >
+                          {acc.name} › {sub.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             </div>

@@ -774,11 +774,27 @@ export function useFinanceData() {
    */
   const creditAccount = useCallback(
     (id: string, amount: number) => {
-      setAccounts((prev) =>
-        prev.map((a) =>
-          a.id === id ? { ...a, balance: a.balance + amount } : a,
-        ),
-      );
+      if (id.includes(">")) {
+        const [parentId, subId] = id.split(">");
+        setAccounts((prev) =>
+          prev.map((a) =>
+            a.id === parentId
+              ? {
+                  ...a,
+                  subAccounts: (a.subAccounts ?? []).map((s) =>
+                    s.id === subId ? { ...s, balance: s.balance + amount } : s,
+                  ),
+                }
+              : a,
+          ),
+        );
+      } else {
+        setAccounts((prev) =>
+          prev.map((a) =>
+            a.id === id ? { ...a, balance: a.balance + amount } : a,
+          ),
+        );
+      }
     },
     [setAccounts],
   );
@@ -788,11 +804,27 @@ export function useFinanceData() {
    */
   const debitAccount = useCallback(
     (id: string, amount: number) => {
-      setAccounts((prev) =>
-        prev.map((a) =>
-          a.id === id ? { ...a, balance: a.balance - amount } : a,
-        ),
-      );
+      if (id.includes(">")) {
+        const [parentId, subId] = id.split(">");
+        setAccounts((prev) =>
+          prev.map((a) =>
+            a.id === parentId
+              ? {
+                  ...a,
+                  subAccounts: (a.subAccounts ?? []).map((s) =>
+                    s.id === subId ? { ...s, balance: s.balance - amount } : s,
+                  ),
+                }
+              : a,
+          ),
+        );
+      } else {
+        setAccounts((prev) =>
+          prev.map((a) =>
+            a.id === id ? { ...a, balance: a.balance - amount } : a,
+          ),
+        );
+      }
     },
     [setAccounts],
   );
@@ -966,19 +998,47 @@ export function useFinanceData() {
       };
       setGoals((prev) => [...prev, newGoal]);
       if (hasAccount && accountId && savedAmount) {
-        // Credit account balance using functional updater (no stale closure)
-        setAccounts((prev) =>
-          prev.map((acc) =>
-            acc.id === accountId
-              ? { ...acc, balance: acc.balance + savedAmount }
-              : acc,
-          ),
-        );
-        // Log a "Save to Goal" transaction in History so users can see the record
+        // Credit account/sub-account balance
+        if (accountId.includes(">")) {
+          const [parentId, subId] = accountId.split(">");
+          setAccounts((prev) =>
+            prev.map((acc) =>
+              acc.id === parentId
+                ? {
+                    ...acc,
+                    subAccounts: (acc.subAccounts ?? []).map((s) =>
+                      s.id === subId
+                        ? { ...s, balance: s.balance + savedAmount }
+                        : s,
+                    ),
+                  }
+                : acc,
+            ),
+          );
+        } else {
+          setAccounts((prev) =>
+            prev.map((acc) =>
+              acc.id === accountId
+                ? { ...acc, balance: acc.balance + savedAmount }
+                : acc,
+            ),
+          );
+        }
+        // Log a "Save to Goal" transaction in History
         const txDate = g.startDate || new Date().toISOString().split("T")[0];
-        // Resolve account name inside a micro-callback to avoid stale render scope
         setAccounts((prevAccs) => {
-          const accName = prevAccs.find((a) => a.id === accountId)?.name ?? "";
+          let accName = "";
+          if (accountId.includes(">")) {
+            const [parentId, subId] = accountId.split(">");
+            const parent = prevAccs.find((a) => a.id === parentId);
+            const sub = (parent?.subAccounts ?? []).find((s) => s.id === subId);
+            accName =
+              parent && sub
+                ? `${parent.name} › ${sub.name}`
+                : (parent?.name ?? "");
+          } else {
+            accName = prevAccs.find((a) => a.id === accountId)?.name ?? "";
+          }
           setTransactions((prevTxs) => [
             {
               id: crypto.randomUUID(),
@@ -992,7 +1052,7 @@ export function useFinanceData() {
             },
             ...prevTxs,
           ]);
-          return prevAccs; // do not modify accounts again
+          return prevAccs;
         });
       }
     },
@@ -1031,9 +1091,21 @@ export function useFinanceData() {
         const targetAccountId = newAccountId || existing.alreadySavedAccountId;
         if (targetAccountId && delta !== 0) {
           setAccounts((prevAcc) => {
-            const accName =
-              prevAcc.find((a) => a.id === targetAccountId)?.name ?? "";
-            // Log a transaction for positive delta (new savings added)
+            let accName = "";
+            if (targetAccountId.includes(">")) {
+              const [parentId, subId] = targetAccountId.split(">");
+              const parent = prevAcc.find((a) => a.id === parentId);
+              const sub = (parent?.subAccounts ?? []).find(
+                (s) => s.id === subId,
+              );
+              accName =
+                parent && sub
+                  ? `${parent.name} › ${sub.name}`
+                  : (parent?.name ?? "");
+            } else {
+              accName =
+                prevAcc.find((a) => a.id === targetAccountId)?.name ?? "";
+            }
             if (delta > 0) {
               const txDate =
                 updates.startDate ||
@@ -1052,6 +1124,21 @@ export function useFinanceData() {
                 },
                 ...prevTxs,
               ]);
+            }
+            if (targetAccountId.includes(">")) {
+              const [parentId, subId] = targetAccountId.split(">");
+              return prevAcc.map((acc) =>
+                acc.id === parentId
+                  ? {
+                      ...acc,
+                      subAccounts: (acc.subAccounts ?? []).map((s) =>
+                        s.id === subId
+                          ? { ...s, balance: s.balance + delta }
+                          : s,
+                      ),
+                    }
+                  : acc,
+              );
             }
             return prevAcc.map((acc) =>
               acc.id === targetAccountId

@@ -1,36 +1,30 @@
 # Flow Tracker
 
 ## Current State
-Flow Tracker is a mobile-first offline PWA for personal finance tracking. The `AddTransaction` page (`src/frontend/src/pages/AddTransaction.tsx`) is the primary transaction entry screen. It already has a built-in calculator (via `showCalc` state), split expense support, and full category/account selection. The page is accessed via a button elsewhere in the app (likely Dashboard or a FAB).
+Sub-accounts each maintain their own `balance` field. Parent account cards display only the parent's own `balance`. Net worth on the Accounts screen is calculated using `a.balance` for each account (non-credit accounts only), which does not include sub-account balances.
 
-No receipt scanning capability exists. Tesseract.js is not currently installed.
+Sub-accounts are nested under parent accounts and only visible when the user expands the dropdown — they are NOT shown as separate cards.
 
 ## Requested Changes (Diff)
 
 ### Add
-- **Receipt scanning button**: A camera icon button placed next to (or alongside) the existing "Add Transaction" trigger button. This could be a secondary icon button near the main + button.
-- **ReceiptScanner component** (`src/frontend/src/components/ReceiptScanner.tsx`): Handles the full scan flow:
-  - Opens device camera via `<input type="file" accept="image/*" capture="environment">` (native camera on mobile, file picker fallback on desktop)
-  - Shows a "Processing..." overlay/spinner while Tesseract.js runs OCR in the browser
-  - Parses OCR text to extract: total amount (looks for TOTAL/AMOUNT/lines with largest currency value), date, merchant name (first meaningful line)
-  - Calls back with extracted `{ amount, date, description }` — never stores the image
-  - Image is revoked/discarded immediately after OCR completes
-- **Tesseract.js dependency**: Add `tesseract.js` to package.json
-- **Pre-fill AddTransaction form**: When scan completes, open AddTransaction with pre-filled amount, date, description — but NOT auto-saved. User reviews and manually taps Save.
+- A helper function `getAccountTotalBalance(acc: Account): number` that returns `acc.balance + sum of all acc.subAccounts[].balance`
 
 ### Modify
-- `AddTransaction.tsx`: Accept optional initial props (`initialAmount`, `initialDate`, `initialDescription`) so the form can be pre-filled from a scan result
-- Wherever the "Add Transaction" button lives (Dashboard or App-level FAB), add the camera scan button adjacent to it
+- **Accounts screen — parent account card balance display:** Replace `acc.balance` with `getAccountTotalBalance(acc)` for the displayed balance on each account card (all account types). For credit accounts, continue using the same logic but with the rolled-up total.
+- **Accounts screen — net worth calculation:** `totalAssets` and `totalLiabilities` calculations should use `getAccountTotalBalance(acc)` instead of `acc.balance`.
+- **Accounts screen — sub-account list when expanded:** Each sub-account still shows its own individual balance (no change here).
+- Any other place in Accounts.tsx where `acc.balance` is used for display/summary purposes (e.g. transfer dropdowns showing account balance in parentheses, goal account selectors) should show rolled-up total.
 
 ### Remove
-- Nothing removed
+- Nothing removed.
 
 ## Implementation Plan
-1. Install `tesseract.js` as a dependency in `src/frontend/package.json`
-2. Create `src/frontend/src/components/ReceiptScanner.tsx`:
-   - Hidden file input with `accept="image/*" capture="environment"`
-   - On file select: show spinner overlay, load Tesseract worker, run OCR, parse result, revoke object URL, call onScanComplete callback
-   - Parse logic: find lines matching currency patterns (₱, PHP, digits with decimals), look for TOTAL/SUBTOTAL/AMOUNT keywords, pick the largest or keyword-matched value as amount; extract date via regex; use first non-empty line as merchant name
-3. Modify `AddTransaction.tsx` to accept `initialAmount?: string`, `initialDate?: string`, `initialDescription?: string` props and seed state from them on mount
-4. In `App.tsx` (or wherever the add transaction flow is triggered), add a camera icon button that triggers ReceiptScanner; on scan complete, open AddTransaction with pre-filled values
-5. Validate and build
+1. Add helper `getAccountTotalBalance(acc: Account): number` near the top of Accounts.tsx (or inline where used).
+2. Replace all display-level `acc.balance` references in Accounts.tsx with `getAccountTotalBalance(acc)` — specifically:
+   - Account card balance display
+   - Net worth / totalAssets / totalLiabilities calculations
+   - Transfer dialog account labels showing balance in parentheses
+   - Any goal-linked account balance shown in parentheses in dropdowns
+3. Keep sub-account individual balance display unchanged (sub.balance stays as-is).
+4. Do NOT change how transactions debit/credit accounts — `acc.balance` and `sub.balance` storage is unchanged, only the display aggregation changes.

@@ -30,7 +30,7 @@ import {
   Trash2,
   TrendingUp,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -1446,9 +1446,17 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                 <SelectContent>
                   <SelectItem value="__none__">None</SelectItem>
                   {accounts.map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id}>
-                      {acc.name}
-                    </SelectItem>
+                    <React.Fragment key={acc.id}>
+                      <SelectItem value={acc.id}>{acc.name}</SelectItem>
+                      {(acc.subAccounts ?? []).map((sub) => (
+                        <SelectItem
+                          key={`${acc.id}>${sub.id}`}
+                          value={`${acc.id}>${sub.id}`}
+                        >
+                          {acc.name} › {sub.name}
+                        </SelectItem>
+                      ))}
+                    </React.Fragment>
                   ))}
                 </SelectContent>
               </Select>
@@ -1608,9 +1616,17 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
                     {accounts.map((acc) => (
-                      <SelectItem key={acc.id} value={acc.id}>
-                        {acc.name}
-                      </SelectItem>
+                      <React.Fragment key={acc.id}>
+                        <SelectItem value={acc.id}>{acc.name}</SelectItem>
+                        {(acc.subAccounts ?? []).map((sub) => (
+                          <SelectItem
+                            key={`${acc.id}>${sub.id}`}
+                            value={`${acc.id}>${sub.id}`}
+                          >
+                            {acc.name} › {sub.name}
+                          </SelectItem>
+                        ))}
+                      </React.Fragment>
                     ))}
                   </SelectContent>
                 </Select>

@@ -17,9 +17,17 @@ type LocalTransactionType = TransactionType | "saveToGoal";
 
 interface AddTransactionProps {
   onDone: () => void;
+  initialAmount?: string;
+  initialDate?: string;
+  initialDescription?: string;
 }
 
-export function AddTransaction({ onDone }: AddTransactionProps) {
+export function AddTransaction({
+  onDone,
+  initialAmount,
+  initialDate,
+  initialDescription,
+}: AddTransactionProps) {
   const t = useTranslation();
   const {
     config,
@@ -36,11 +44,13 @@ export function AddTransaction({ onDone }: AddTransactionProps) {
     addIOU,
   } = useFinanceData();
 
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState(initialAmount ?? "");
   const [type, setType] = useState<LocalTransactionType>("expense");
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [date, setDate] = useState(
+    initialDate ?? format(new Date(), "yyyy-MM-dd"),
+  );
   const [subCategory, setSubCategory] = useState("");
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initialDescription ?? "");
   // Store account ID (UUID) instead of name to avoid lookup failures
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [showSuggestion, setShowSuggestion] = useState<string | null>(null);

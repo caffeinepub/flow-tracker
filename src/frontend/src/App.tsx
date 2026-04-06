@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { BottomNav } from "./components/BottomNav";
 import type { Tab } from "./components/BottomNav";
 import { PinLockScreen } from "./components/PinLockScreen";
+import { ReceiptScanner } from "./components/ReceiptScanner";
+import type { ReceiptScanResult } from "./components/ReceiptScanner";
 import { useFinanceData } from "./hooks/useFinanceData";
 import { useTranslation } from "./hooks/useTranslation";
 import { Accounts } from "./pages/Accounts";
@@ -35,6 +37,9 @@ export default function App() {
 
   // Privacy mode — session only, always starts false
   const [privacyMode, setPrivacyMode] = useState(false);
+
+  // Receipt scanner pre-fill state
+  const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
 
   // PIN lock state
   const [pinLocked, setPinLocked] = useState(() => hasPinSet());
@@ -252,7 +257,15 @@ export default function App() {
             <Dashboard onNavigate={setActiveTab} privacyMode={privacyMode} />
           )}
           {activeTab === "add" && (
-            <AddTransaction onDone={() => setActiveTab("dashboard")} />
+            <AddTransaction
+              onDone={() => {
+                setActiveTab("dashboard");
+                setScanResult(null);
+              }}
+              initialAmount={scanResult?.amount}
+              initialDate={scanResult?.date}
+              initialDescription={scanResult?.description}
+            />
           )}
           {activeTab === "accounts" && <Accounts privacyMode={privacyMode} />}
           {activeTab === "projections" && (
@@ -264,6 +277,21 @@ export default function App() {
           {activeTab === "notes" && <Notes />}
           {activeTab === "settings" && <Settings />}
         </main>
+
+        {/* Floating receipt scanner button — hidden while on the add tab */}
+        {activeTab !== "add" && (
+          <div
+            className="fixed z-40"
+            style={{ bottom: "72px", right: "calc(50% - 72px)" }}
+          >
+            <ReceiptScanner
+              onScanComplete={(result) => {
+                setScanResult(result);
+                setActiveTab("add");
+              }}
+            />
+          </div>
+        )}
 
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
         <Toaster />

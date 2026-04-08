@@ -20,6 +20,10 @@ interface AddTransactionProps {
   initialAmount?: string;
   initialDate?: string;
   initialDescription?: string;
+  initialType?: "expense" | "income" | "saveToGoal";
+  initialSubCategory?: string;
+  initialAccount?: string;
+  initialGoalId?: string;
 }
 
 export function AddTransaction({
@@ -27,6 +31,10 @@ export function AddTransaction({
   initialAmount,
   initialDate,
   initialDescription,
+  initialType,
+  initialSubCategory,
+  initialAccount,
+  initialGoalId,
 }: AddTransactionProps) {
   const t = useTranslation();
   const {
@@ -43,21 +51,28 @@ export function AddTransaction({
     goals,
     addIOU,
     updateTransaction,
+    transactions,
+    periods,
+    updateGoal,
   } = useFinanceData();
 
   const [amount, setAmount] = useState(initialAmount ?? "");
-  const [type, setType] = useState<LocalTransactionType>("expense");
+  const [type, setType] = useState<LocalTransactionType>(
+    initialType ?? "expense",
+  );
   const [date, setDate] = useState(
     initialDate ?? format(new Date(), "yyyy-MM-dd"),
   );
-  const [subCategory, setSubCategory] = useState("");
+  const [subCategory, setSubCategory] = useState(initialSubCategory ?? "");
   const [description, setDescription] = useState(initialDescription ?? "");
   // Store account ID (UUID) instead of name to avoid lookup failures
-  const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState(
+    initialAccount ?? "",
+  );
   const [showSuggestion, setShowSuggestion] = useState<string | null>(null);
 
   // Save to Goal state
-  const [selectedGoalId, setSelectedGoalId] = useState("");
+  const [selectedGoalId, setSelectedGoalId] = useState(initialGoalId ?? "");
   const [toAccountId, setToAccountId] = useState("");
 
   // Split expense state
@@ -98,7 +113,7 @@ export function AddTransaction({
     }
   }, [description, subCategory, type]);
 
-  // Auto-pre-fill account from goal's linked account when a goal is selected
+  // Auto-pre-fill From Account and To Account from goal's linked account when a goal is selected
   useEffect(() => {
     if (type === "saveToGoal" && selectedGoalId) {
       const goal = goals.find((g) => g.id === selectedGoalId);
@@ -106,6 +121,7 @@ export function AddTransaction({
         setSelectedAccountId(
           (prev) => prev || goal.alreadySavedAccountId || "",
         );
+        setToAccountId((prev) => prev || goal.alreadySavedAccountId || "");
       }
     }
   }, [selectedGoalId, type, goals]);
@@ -202,14 +218,16 @@ export function AddTransaction({
       }
 
       // 1. Log the goal expense transaction
-      addTransaction({
+      // Use composite key (parentId>subId) for sub-accounts so sub-account history filter matches
+      const savedTx = addTransaction({
         amount: num,
         date,
         type: "expense",
         mainCategory: parentCatName,
         subCategory: selectedGoal.subCategoryName,
         description: description || `Saved to ${goalLabel}`,
-        account: fromAccName,
+        account: selectedAccountId || undefined,
+        goalId: selectedGoalId,
       });
 
       // 2. Debit from-account (supports sub-account composite keys)
@@ -222,7 +240,7 @@ export function AddTransaction({
         creditAccount(toAccountId, num);
       }
 
-      // 4. Log transfer records if accounts differ
+      // 4. Log transfer records if accounts differ — use display names for transfer descriptions
       if (
         toAccountId &&
         toAccountId !== selectedAccountId &&
@@ -236,7 +254,7 @@ export function AddTransaction({
           mainCategory: "Transfer",
           subCategory: "",
           description: `Transfer to ${toAccName} – Goal: ${goalLabel}`,
-          account: fromAccName,
+          account: selectedAccountId || undefined,
         });
         addTransaction({
           amount: num,
@@ -245,9 +263,38 @@ export function AddTransaction({
           mainCategory: "Transfer",
           subCategory: "",
           description: `Transfer from ${fromAccName} – Goal: ${goalLabel}`,
-          account: toAccName,
+          account: toAccountId || undefined,
         });
       }
+
+      // 5. Update goal's currentSaved — sum from ALL periods (current + archived) for accuracy
+      const seen = new Set<string>();
+      const allTxs: typeof transactions = [];
+      // Include the newly added transaction before state settles
+      if (savedTx) {
+        seen.add(savedTx.id);
+        allTxs.push(savedTx);
+      }
+      for (const tx of transactions) {
+        if (!seen.has(tx.id)) {
+          seen.add(tx.id);
+          allTxs.push(tx);
+        }
+      }
+      for (const p of periods) {
+        for (const tx of p.transactions) {
+          if (!seen.has(tx.id)) {
+            seen.add(tx.id);
+            allTxs.push(tx);
+          }
+        }
+      }
+      const goalSavedSum = allTxs
+        .filter((tx) => tx.goalId === selectedGoalId && tx.type === "expense")
+        .reduce((s, tx) => s + tx.amount, 0);
+      const newCurrentSaved =
+        (selectedGoal.alreadySavedAmount ?? 0) + goalSavedSum;
+      updateGoal(selectedGoalId, { currentSaved: newCurrentSaved });
 
       toast.success(`Saved to ${goalLabel}!`);
       setAmount("");
@@ -413,9 +460,9 @@ export function AddTransaction({
   };
 
   return (
-    <div className="pb-24 px-4 pt-2 fade-in">
+    <div className="pb-24 px-4 pt-2 animate-spring-in">
       <div className="flex items-center gap-2 mb-6">
-        <h1 className="text-xl font-bold text-foreground flex-1">
+        <h1 className="text-xl font-display font-bold text-foreground flex-1">
           {t("addTransaction")}
         </h1>
         <HelpSheet
@@ -424,10 +471,7 @@ export function AddTransaction({
         />
       </div>
 
-      <div
-        className="rounded-2xl border border-border p-5 mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
-      >
+      <div className="glass-card p-5 mb-4">
         <div className="flex gap-2 mb-4">
           <button
             type="button"
@@ -497,44 +541,52 @@ export function AddTransaction({
         {/* Amount + Date */}
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div>
-            <Label htmlFor="amount">{t("amount")}</Label>
             {!showCalc ? (
-              <Input
-                id="amount"
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                onFocus={() => setShowCalc(true)}
-                placeholder="0.00"
-                min="0"
-                step="0.01"
-                className="mt-1"
-                data-ocid="add_transaction.amount.input"
-                readOnly
-              />
+              <div className="floating-label-group">
+                <input
+                  id="amount"
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  onFocus={() => setShowCalc(true)}
+                  placeholder=" "
+                  min="0"
+                  step="0.01"
+                  data-ocid="add_transaction.amount.input"
+                  readOnly
+                />
+                <label htmlFor="amount">{t("amount")}</label>
+              </div>
             ) : (
-              <button
-                type="button"
-                className="mt-1 rounded-xl border border-border p-1 cursor-pointer w-full text-left"
-                onClick={() => setShowCalc(true)}
-                style={{ backgroundColor: "oklch(var(--secondary))" }}
-              >
-                <div className="text-right px-2 py-1 min-h-[36px] flex items-center justify-end">
-                  <span className="text-base font-bold text-foreground">
-                    {calcResult || calcExpression || "0"}
-                  </span>
-                </div>
-              </button>
+              <div>
+                <span className="text-xs font-medium text-primary mb-1 block">
+                  {t("amount")}
+                </span>
+                <button
+                  type="button"
+                  className="rounded-xl border border-border p-1 cursor-pointer w-full text-left"
+                  onClick={() => setShowCalc(true)}
+                  style={{ backgroundColor: "oklch(var(--secondary))" }}
+                >
+                  <div className="text-right px-2 py-1 min-h-[36px] flex items-center justify-end">
+                    <span className="text-base font-bold text-foreground">
+                      {calcResult || calcExpression || "0"}
+                    </span>
+                  </div>
+                </button>
+              </div>
             )}
           </div>
           <div>
-            <Label htmlFor="txdate">{t("date")}</Label>
-            <Input
+            <span className="text-xs font-medium text-muted-foreground mb-1 block">
+              {t("date")}
+            </span>
+            <input
               id="txdate"
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="mt-1"
+              className="w-full px-3 py-2 rounded-xl border border-border bg-input text-foreground text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               data-ocid="add_transaction.date.input"
             />
           </div>
@@ -801,46 +853,78 @@ export function AddTransaction({
                   None
                 </button>
                 {accounts.map((acc) => (
-                  <button
-                    type="button"
-                    key={acc.id}
-                    onClick={() =>
-                      setToAccountId(toAccountId === acc.id ? "" : acc.id)
-                    }
-                    className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
-                    style={{
-                      backgroundColor:
-                        toAccountId === acc.id
-                          ? "oklch(var(--primary) / 0.15)"
-                          : "transparent",
-                      borderColor:
-                        toAccountId === acc.id
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--border))",
-                      color:
-                        toAccountId === acc.id
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--foreground))",
-                    }}
-                    data-ocid="add_transaction.to_account.toggle"
-                  >
-                    {acc.name}
-                  </button>
+                  <div key={acc.id} className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setToAccountId(toAccountId === acc.id ? "" : acc.id)
+                      }
+                      className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                      style={{
+                        backgroundColor:
+                          toAccountId === acc.id
+                            ? "oklch(var(--primary) / 0.15)"
+                            : "transparent",
+                        borderColor:
+                          toAccountId === acc.id
+                            ? "oklch(var(--primary))"
+                            : "oklch(var(--border))",
+                        color:
+                          toAccountId === acc.id
+                            ? "oklch(var(--primary))"
+                            : "oklch(var(--foreground))",
+                      }}
+                      data-ocid="add_transaction.to_account.toggle"
+                    >
+                      {acc.name}
+                    </button>
+                    {(acc.subAccounts ?? []).map((sub) => {
+                      const subKey = `${acc.id}>${sub.id}`;
+                      return (
+                        <button
+                          type="button"
+                          key={sub.id}
+                          onClick={() =>
+                            setToAccountId(toAccountId === subKey ? "" : subKey)
+                          }
+                          className="px-3 py-1.5 rounded-full text-xs font-medium border transition-all"
+                          style={{
+                            backgroundColor:
+                              toAccountId === subKey
+                                ? "oklch(var(--primary) / 0.15)"
+                                : "transparent",
+                            borderColor:
+                              toAccountId === subKey
+                                ? "oklch(var(--primary))"
+                                : "oklch(var(--border))",
+                            color:
+                              toAccountId === subKey
+                                ? "oklch(var(--primary))"
+                                : "oklch(var(--muted-foreground))",
+                          }}
+                          data-ocid="add_transaction.to_account.toggle"
+                        >
+                          {acc.name} › {sub.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 ))}
               </div>
             </div>
 
             {/* Description */}
             <div className="mb-4">
-              <Label htmlFor="desc-goal">{t("description")}</Label>
-              <Input
-                id="desc-goal"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional"
-                className="mt-1"
-                data-ocid="add_transaction.description.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="desc-goal"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder=" "
+                  data-ocid="add_transaction.description.input"
+                />
+                <label htmlFor="desc-goal">{t("description")} (optional)</label>
+              </div>
             </div>
 
             {/* Submit */}
@@ -963,15 +1047,16 @@ export function AddTransaction({
             )}
 
             <div className="mt-4">
-              <Label htmlFor="desc">{t("description")}</Label>
-              <Input
-                id="desc"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional"
-                className="mt-1"
-                data-ocid="add_transaction.description.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="desc"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder=" "
+                  data-ocid="add_transaction.description.input"
+                />
+                <label htmlFor="desc">{t("description")} (optional)</label>
+              </div>
             </div>
 
             {/* Account selector */}
@@ -1096,32 +1181,31 @@ export function AddTransaction({
                 </button>
                 {splitEnabled && (
                   <div
-                    className="mt-2 p-3 rounded-xl border border-border space-y-2"
-                    style={{ backgroundColor: "oklch(var(--secondary) / 0.5)" }}
+                    className="mt-2 p-3 rounded-xl glass-card-sm space-y-3"
                     data-ocid="add_transaction.split.panel"
                   >
-                    <div>
-                      <Label className="text-xs">Other person's name</Label>
-                      <Input
+                    <div className="floating-label-group">
+                      <input
+                        id="split-person"
                         value={splitPersonName}
                         onChange={(e) => setSplitPersonName(e.target.value)}
-                        placeholder="e.g. Maria"
-                        className="mt-1 h-8 text-sm"
+                        placeholder=" "
                         data-ocid="add_transaction.split_person.input"
                       />
+                      <label htmlFor="split-person">Other person's name</label>
                     </div>
-                    <div>
-                      <Label className="text-xs">Their share (₱)</Label>
-                      <Input
+                    <div className="floating-label-group">
+                      <input
+                        id="split-amount"
                         type="number"
                         value={splitAmount}
                         onChange={(e) => setSplitAmount(e.target.value)}
-                        placeholder="0.00"
+                        placeholder=" "
                         min="0"
                         step="0.01"
-                        className="mt-1 h-8 text-sm"
                         data-ocid="add_transaction.split_amount.input"
                       />
+                      <label htmlFor="split-amount">Their share (₱)</label>
                     </div>
                     {amount &&
                       splitAmount &&

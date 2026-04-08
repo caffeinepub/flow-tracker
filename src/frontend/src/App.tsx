@@ -1,6 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { Eye, EyeOff, Leaf, Moon, Sun } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { AppSidebar } from "./components/AppSidebar";
 import { BottomNav } from "./components/BottomNav";
 import type { Tab } from "./components/BottomNav";
 import { PinLockScreen } from "./components/PinLockScreen";
@@ -40,6 +41,16 @@ export default function App() {
 
   // Receipt scanner pre-fill state
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
+
+  // Copy transaction pre-fill state
+  const [copyPrefill, setCopyPrefill] = useState<{
+    amount?: string;
+    date?: string;
+    description?: string;
+    type?: "expense" | "income" | "saveToGoal";
+    subCategory?: string;
+    account?: string;
+  } | null>(null);
 
   // PIN lock state
   const [pinLocked, setPinLocked] = useState(() => hasPinSet());
@@ -194,105 +205,143 @@ export default function App() {
   return (
     <div className={isDark ? "dark" : ""}>
       <div className="min-h-screen gradient-bg">
-        <header
-          className="sticky top-0 z-40 border-b border-border backdrop-blur-sm"
-          style={{ backgroundColor: "oklch(var(--card) / 0.9)" }}
-        >
-          <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
-            <div className="flex items-center gap-2">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: "oklch(var(--primary))" }}
-              >
-                <Leaf size={14} className="text-primary-foreground" />
-              </div>
-              <span className="font-bold text-sm text-foreground">
-                Flow Tracker
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {config?.name}
-              </span>
-              {/* Privacy Mode Toggle */}
-              <button
-                type="button"
-                onClick={() => setPrivacyMode((v) => !v)}
-                className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
-                style={{ backgroundColor: "oklch(var(--secondary))" }}
-                aria-label={privacyMode ? "Show amounts" : "Hide amounts"}
-                data-ocid="app.privacy_toggle"
-              >
-                {privacyMode ? (
-                  <EyeOff size={14} className="text-foreground" />
-                ) : (
-                  <Eye size={14} className="text-foreground" />
-                )}
-              </button>
-              {/* Theme Toggle */}
-              <button
-                type="button"
-                onClick={handleThemeToggle}
-                className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
-                style={{ backgroundColor: "oklch(var(--secondary))" }}
-                aria-label="Toggle theme"
-                data-ocid="app.theme_toggle"
-              >
-                {isDark ? (
-                  <Sun size={14} className="text-foreground" />
-                ) : (
-                  <Moon size={14} className="text-foreground" />
-                )}
-              </button>
-            </div>
-          </div>
-        </header>
+        {/* Desktop sidebar — hidden on mobile */}
+        <AppSidebar
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          isDark={isDark}
+          onThemeToggle={handleThemeToggle}
+          privacyMode={privacyMode}
+          onPrivacyToggle={() => setPrivacyMode((v) => !v)}
+        />
 
-        <div className="px-4 pt-4 pb-2 max-w-lg mx-auto">
-          <h1 className="text-2xl font-bold text-foreground">{pageTitle()}</h1>
+        {/* Main content wrapper — offset on desktop for sidebar */}
+        <div className="lg:ml-20">
+          {/* Mobile header — hidden on desktop (sidebar handles branding + controls) */}
+          <header
+            className="lg:hidden sticky top-0 z-40 border-b border-border backdrop-blur-sm"
+            style={{ backgroundColor: "oklch(var(--card) / 0.9)" }}
+          >
+            <div className="flex items-center justify-between px-4 py-3 max-w-lg mx-auto">
+              <div className="flex items-center gap-2">
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: "oklch(var(--primary))" }}
+                >
+                  <Leaf size={14} className="text-primary-foreground" />
+                </div>
+                <span className="font-bold text-sm text-foreground">
+                  Flow Tracker
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {config?.name}
+                </span>
+                {/* Privacy Mode Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setPrivacyMode((v) => !v)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
+                  style={{ backgroundColor: "oklch(var(--secondary))" }}
+                  aria-label={privacyMode ? "Show amounts" : "Hide amounts"}
+                  data-ocid="app.privacy_toggle"
+                >
+                  {privacyMode ? (
+                    <EyeOff size={14} className="text-foreground" />
+                  ) : (
+                    <Eye size={14} className="text-foreground" />
+                  )}
+                </button>
+                {/* Theme Toggle */}
+                <button
+                  type="button"
+                  onClick={handleThemeToggle}
+                  className="w-8 h-8 flex items-center justify-center rounded-full transition-all"
+                  style={{ backgroundColor: "oklch(var(--secondary))" }}
+                  aria-label="Toggle theme"
+                  data-ocid="app.theme_toggle"
+                >
+                  {isDark ? (
+                    <Sun size={14} className="text-foreground" />
+                  ) : (
+                    <Moon size={14} className="text-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Desktop page title bar */}
+          <div className="hidden lg:block px-6 pt-5 pb-2">
+            <h1 className="text-2xl font-bold text-foreground font-display">
+              {pageTitle()}
+            </h1>
+          </div>
+
+          {/* Mobile page title */}
+          <div className="lg:hidden px-4 pt-4 pb-2 max-w-lg mx-auto">
+            <h1 className="text-2xl font-bold text-foreground">
+              {pageTitle()}
+            </h1>
+          </div>
+
+          <main className="max-w-lg mx-auto lg:max-w-none">
+            {activeTab === "dashboard" && (
+              <Dashboard onNavigate={setActiveTab} privacyMode={privacyMode} />
+            )}
+            {activeTab === "add" && (
+              <AddTransaction
+                onDone={() => {
+                  setActiveTab("dashboard");
+                  setScanResult(null);
+                  setCopyPrefill(null);
+                }}
+                initialAmount={copyPrefill?.amount ?? scanResult?.amount}
+                initialDate={copyPrefill?.date ?? scanResult?.date}
+                initialDescription={
+                  copyPrefill?.description ?? scanResult?.description
+                }
+                initialType={copyPrefill?.type}
+                initialSubCategory={copyPrefill?.subCategory}
+                initialAccount={copyPrefill?.account}
+              />
+            )}
+            {activeTab === "accounts" && <Accounts privacyMode={privacyMode} />}
+            {activeTab === "projections" && (
+              <Projections privacyMode={privacyMode} />
+            )}
+            {activeTab === "history" && (
+              <History
+                onNavigate={setActiveTab}
+                privacyMode={privacyMode}
+                onOpenAddTransaction={(prefill) => {
+                  setCopyPrefill(prefill);
+                  setActiveTab("add");
+                }}
+              />
+            )}
+            {activeTab === "notes" && <Notes />}
+            {activeTab === "settings" && <Settings />}
+          </main>
+
+          {/* Floating receipt scanner button — mobile only, hidden while on the add tab */}
+          {activeTab !== "add" && (
+            <div
+              className="lg:hidden fixed z-40"
+              style={{ bottom: "72px", right: "calc(50% - 72px)" }}
+            >
+              <ReceiptScanner
+                onScanComplete={(result) => {
+                  setScanResult(result);
+                  setActiveTab("add");
+                }}
+              />
+            </div>
+          )}
         </div>
 
-        <main className="max-w-lg mx-auto">
-          {activeTab === "dashboard" && (
-            <Dashboard onNavigate={setActiveTab} privacyMode={privacyMode} />
-          )}
-          {activeTab === "add" && (
-            <AddTransaction
-              onDone={() => {
-                setActiveTab("dashboard");
-                setScanResult(null);
-              }}
-              initialAmount={scanResult?.amount}
-              initialDate={scanResult?.date}
-              initialDescription={scanResult?.description}
-            />
-          )}
-          {activeTab === "accounts" && <Accounts privacyMode={privacyMode} />}
-          {activeTab === "projections" && (
-            <Projections privacyMode={privacyMode} />
-          )}
-          {activeTab === "history" && (
-            <History onNavigate={setActiveTab} privacyMode={privacyMode} />
-          )}
-          {activeTab === "notes" && <Notes />}
-          {activeTab === "settings" && <Settings />}
-        </main>
-
-        {/* Floating receipt scanner button — hidden while on the add tab */}
-        {activeTab !== "add" && (
-          <div
-            className="fixed z-40"
-            style={{ bottom: "72px", right: "calc(50% - 72px)" }}
-          >
-            <ReceiptScanner
-              onScanComplete={(result) => {
-                setScanResult(result);
-                setActiveTab("add");
-              }}
-            />
-          </div>
-        )}
-
+        {/* Mobile bottom nav */}
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
         <Toaster />
       </div>

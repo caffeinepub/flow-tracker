@@ -778,7 +778,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
   };
 
   return (
-    <div className="pb-24 px-4 pt-2 fade-in">
+    <div className="pb-24 px-4 pt-2 animate-spring-in">
       {/* CC Alerts */}
       {ccAlerts.length > 0 && (
         <div
@@ -811,11 +811,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
       )}
 
       {/* Net Worth */}
-      <div
-        className="rounded-2xl border border-border p-4 mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
-        data-ocid="accounts.net_worth.card"
-      >
+      <div className="glass-card p-4 mb-4" data-ocid="accounts.net_worth.card">
         <h2 className="text-sm font-semibold text-muted-foreground mb-3">
           Net Worth
         </h2>
@@ -959,8 +955,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                   onDragStart={() => handleDragStart(idx)}
                   onDragOver={(e) => handleDragOver(e, idx)}
                   onDrop={handleDrop}
-                  className="rounded-2xl border border-border p-4 cursor-grab active:cursor-grabbing transition-opacity"
-                  style={{ backgroundColor: "oklch(var(--card))" }}
+                  className="glass-card card-hover p-4 cursor-grab active:cursor-grabbing"
                   data-ocid={`accounts.account.item.${idx + 1}`}
                 >
                   <div className="flex items-start gap-3">
@@ -1113,10 +1108,9 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                       {expandedSubAccounts[acc.id] && (
                         <div className="mt-2 pl-4 space-y-1.5">
                           {(acc.subAccounts ?? []).map((sub) => {
-                            const lastTx = [...transactions]
-                              .filter(
-                                (t) => t.account === `${acc.id}>${sub.id}`,
-                              )
+                            const subKey = `${acc.id}>${sub.id}`;
+                            const lastTx = [...allAccountTransactions]
+                              .filter((t) => t.account === subKey)
                               .sort((a, b) => b.date.localeCompare(a.date))[0];
                             return (
                               <div
@@ -1178,7 +1172,9 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                                       });
                                       setSubAccountForm({
                                         name: sub.name,
-                                        balance: sub.balance.toString(),
+                                        balance: (
+                                          sub.openingBalance ?? sub.balance
+                                        ).toString(),
                                         openingDate:
                                           sub.openingDate ??
                                           format(new Date(), "yyyy-MM-dd"),
@@ -1261,8 +1257,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         }}
       >
         <div
-          className="rounded-2xl border border-border mb-4 overflow-hidden"
-          style={{ backgroundColor: "oklch(var(--card))" }}
+          className="glass-card mb-4 overflow-hidden"
           data-ocid="accounts.iou.panel"
         >
           <CollapsibleTrigger asChild>
@@ -1459,8 +1454,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         }}
       >
         <div
-          className="rounded-2xl border border-border mb-4 overflow-hidden"
-          style={{ backgroundColor: "oklch(var(--card))" }}
+          className="glass-card mb-4 overflow-hidden"
           data-ocid="accounts.bills.panel"
         >
           <CollapsibleTrigger asChild>
@@ -1691,44 +1685,54 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-xs">Bill Name</Label>
-              <Input
-                value={billForm.name}
-                onChange={(e) =>
-                  setBillForm((f) => ({ ...f, name: e.target.value }))
-                }
-                placeholder="e.g. Electricity"
-                className="mt-1"
-                data-ocid="accounts.bills.name.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="bill-name"
+                  type="text"
+                  value={billForm.name}
+                  onChange={(e) =>
+                    setBillForm((f) => ({ ...f, name: e.target.value }))
+                  }
+                  placeholder=" "
+                  data-ocid="accounts.bills.name.input"
+                />
+                <label htmlFor="bill-name">Bill Name</label>
+              </div>
             </div>
             <div>
-              <Label className="text-xs">Amount (₱)</Label>
-              <Input
-                type="number"
-                value={billForm.amount}
-                onChange={(e) =>
-                  setBillForm((f) => ({ ...f, amount: e.target.value }))
-                }
-                placeholder="0.00"
-                className="mt-1"
-                data-ocid="accounts.bills.amount.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="bill-amount"
+                  type="number"
+                  value={billForm.amount}
+                  onChange={(e) =>
+                    setBillForm((f) => ({ ...f, amount: e.target.value }))
+                  }
+                  placeholder=" "
+                  data-ocid="accounts.bills.amount.input"
+                />
+                <label htmlFor="bill-amount">Amount (₱)</label>
+              </div>
             </div>
             <div>
-              <Label className="text-xs">Due Day of Month (1–31)</Label>
-              <Input
-                type="number"
-                min={1}
-                max={31}
-                value={billForm.dueDayOfMonth}
-                onChange={(e) =>
-                  setBillForm((f) => ({ ...f, dueDayOfMonth: e.target.value }))
-                }
-                placeholder="e.g. 15"
-                className="mt-1"
-                data-ocid="accounts.bills.due_day.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="bill-due-day"
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={billForm.dueDayOfMonth}
+                  onChange={(e) =>
+                    setBillForm((f) => ({
+                      ...f,
+                      dueDayOfMonth: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  data-ocid="accounts.bills.due_day.input"
+                />
+                <label htmlFor="bill-due-day">Due Day of Month (1–31)</label>
+              </div>
             </div>
             <div>
               <Label className="text-xs">Notes (optional)</Label>
@@ -1836,8 +1840,18 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
           </DialogHeader>
           {historyAccount &&
             (() => {
+              // Build set of all keys that belong to this account:
+              // - parent account name (e.g. "OwnBank")
+              // - all sub-account composite keys (e.g. "parentId>subId")
+              const subKeys = new Set<string>(
+                (historyAccount.subAccounts ?? []).map(
+                  (sub) => `${historyAccount.id}>${sub.id}`,
+                ),
+              );
               const accTxs = allAccountTransactions.filter(
-                (tx) => tx.account === historyAccount.name,
+                (tx) =>
+                  tx.account === historyAccount.name ||
+                  (tx.account && subKeys.has(tx.account)),
               );
               if (accTxs.length === 0) {
                 return (
@@ -2018,12 +2032,10 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
           </DialogHeader>
           {accountEditTx && (
             <div className="space-y-3">
-              <div>
-                <Label>Amount</Label>
+              <div className="floating-label-group">
                 <input
+                  id="acct-edit-amount"
                   type="number"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                  style={{ borderColor: "oklch(var(--border))" }}
                   value={accountEditTx.amount}
                   onChange={(e) => {
                     setAccountEditTx((prev) =>
@@ -2032,38 +2044,40 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                     setAcctSplitTotalBillChanged(null);
                     setAcctSplitNewTotal("");
                   }}
+                  placeholder=" "
                   data-ocid="accounts.history.edit.amount.input"
                 />
+                <label htmlFor="acct-edit-amount">Amount</label>
               </div>
-              <div>
-                <Label>Date</Label>
+              <div className="floating-label-group">
                 <input
+                  id="acct-edit-date"
                   type="date"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                  style={{ borderColor: "oklch(var(--border))" }}
                   value={accountEditTx.date}
                   onChange={(e) =>
                     setAccountEditTx((prev) =>
                       prev ? { ...prev, date: e.target.value } : null,
                     )
                   }
+                  placeholder=" "
                   data-ocid="accounts.history.edit.date.input"
                 />
+                <label htmlFor="acct-edit-date">Date</label>
               </div>
-              <div>
-                <Label>Description</Label>
+              <div className="floating-label-group">
                 <input
+                  id="acct-edit-desc"
                   type="text"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                  style={{ borderColor: "oklch(var(--border))" }}
                   value={accountEditTx.description}
                   onChange={(e) =>
                     setAccountEditTx((prev) =>
                       prev ? { ...prev, description: e.target.value } : null,
                     )
                   }
+                  placeholder=" "
                   data-ocid="accounts.history.edit.description.input"
                 />
+                <label htmlFor="acct-edit-desc">Description</label>
               </div>
               {/* Split expense total change prompt */}
               {(() => {
@@ -2133,16 +2147,21 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                     </div>
                     {acctSplitTotalBillChanged === true && (
                       <div>
-                        <Label>New Total Bill Amount</Label>
-                        <input
-                          type="number"
-                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                          style={{ borderColor: "oklch(var(--border))" }}
-                          placeholder="Enter new total"
-                          value={acctSplitNewTotal}
-                          onChange={(e) => setAcctSplitNewTotal(e.target.value)}
-                          data-ocid="accounts.history.edit.split_new_total.input"
-                        />
+                        <div className="floating-label-group">
+                          <input
+                            id="acct-split-new-total"
+                            type="number"
+                            placeholder=" "
+                            value={acctSplitNewTotal}
+                            onChange={(e) =>
+                              setAcctSplitNewTotal(e.target.value)
+                            }
+                            data-ocid="accounts.history.edit.split_new_total.input"
+                          />
+                          <label htmlFor="acct-split-new-total">
+                            New Total Bill Amount
+                          </label>
+                        </div>
                         {acctSplitNewTotal && Number(acctSplitNewTotal) > 0 && (
                           <p className="text-xs text-muted-foreground mt-1">
                             Their share will be: ₱
@@ -2233,26 +2252,47 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                   }
                 }
                 if (origTx?.account) {
-                  const origAcc = accounts.find(
-                    (a) => a.name === origTx.account,
-                  );
-                  if (origAcc) {
+                  const txAcct = origTx.account;
+                  if (txAcct.includes(">")) {
+                    // sub-account: reverse using composite key via creditAccount/debitAccount
                     if (origTx.type === "expense") {
-                      creditAccount(origAcc.id, origTx.amount);
+                      creditAccount(txAcct, origTx.amount);
                     } else if (origTx.type === "income") {
-                      debitAccount(origAcc.id, origTx.amount);
+                      debitAccount(txAcct, origTx.amount);
+                    }
+                  } else {
+                    const origAcc = accounts.find(
+                      (a) => a.name === txAcct || a.id === txAcct,
+                    );
+                    if (origAcc) {
+                      if (origTx.type === "expense") {
+                        creditAccount(origAcc.id, origTx.amount);
+                      } else if (origTx.type === "income") {
+                        debitAccount(origAcc.id, origTx.amount);
+                      }
                     }
                   }
                 }
                 // Apply new balance effect
                 const accName = accountEditTx.account || origTx?.account;
                 if (accName) {
-                  const newAcc = accounts.find((a) => a.name === accName);
-                  if (newAcc) {
+                  if (accName.includes(">")) {
+                    // sub-account: apply using composite key
                     if (accountEditTx.type === "expense") {
-                      debitAccount(newAcc.id, num);
+                      debitAccount(accName, num);
                     } else if (accountEditTx.type === "income") {
-                      creditAccount(newAcc.id, num);
+                      creditAccount(accName, num);
+                    }
+                  } else {
+                    const newAcc = accounts.find(
+                      (a) => a.name === accName || a.id === accName,
+                    );
+                    if (newAcc) {
+                      if (accountEditTx.type === "expense") {
+                        debitAccount(newAcc.id, num);
+                      } else if (accountEditTx.type === "income") {
+                        creditAccount(newAcc.id, num);
+                      }
                     }
                   }
                 }
@@ -2351,43 +2391,47 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                   data-ocid="accounts.sub_account.input"
                 />
               </div>
-              {!editSubAccountState && (
-                <>
-                  <div>
-                    <Label className="text-xs">
-                      Opening Balance (optional)
-                    </Label>
-                    <input
-                      type="number"
-                      value={subAccountForm.balance}
-                      onChange={(e) =>
-                        setSubAccountForm((p) => ({
-                          ...p,
-                          balance: e.target.value,
-                        }))
-                      }
-                      placeholder="0.00"
-                      min="0"
-                      className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-                      data-ocid="accounts.sub_account.balance.input"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Opening Date</Label>
-                    <input
-                      type="date"
-                      value={subAccountForm.openingDate}
-                      onChange={(e) =>
-                        setSubAccountForm((p) => ({
-                          ...p,
-                          openingDate: e.target.value,
-                        }))
-                      }
-                      className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-                </>
-              )}
+              {/* Opening Balance — shown for new accounts AND when editing */}
+              <div>
+                <Label className="text-xs">
+                  {editSubAccountState
+                    ? "Opening Balance"
+                    : "Opening Balance (optional)"}
+                </Label>
+                <input
+                  type="number"
+                  value={subAccountForm.balance}
+                  onChange={(e) =>
+                    setSubAccountForm((p) => ({
+                      ...p,
+                      balance: e.target.value,
+                    }))
+                  }
+                  placeholder="0.00"
+                  min="0"
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                  data-ocid="accounts.sub_account.balance.input"
+                />
+                {editSubAccountState && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Changing this will adjust the balance by the difference
+                  </p>
+                )}
+              </div>
+              <div>
+                <Label className="text-xs">Opening Date</Label>
+                <input
+                  type="date"
+                  value={subAccountForm.openingDate}
+                  onChange={(e) =>
+                    setSubAccountForm((p) => ({
+                      ...p,
+                      openingDate: e.target.value,
+                    }))
+                  }
+                  className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground text-sm outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
               <div>
                 <Label className="text-xs">Color (optional)</Label>
                 <div className="flex items-center gap-2 mt-1">
@@ -2429,13 +2473,27 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                     return;
                   }
                   if (editSubAccountState) {
+                    const oldOpeningBalance =
+                      editSubAccountState.sub.openingBalance ?? 0;
+                    const newOpeningBalance =
+                      Number.parseFloat(subAccountForm.balance) || 0;
+                    const updates: Partial<typeof editSubAccountState.sub> = {
+                      name: subName,
+                      color: subAccountForm.color || undefined,
+                      openingBalance:
+                        newOpeningBalance > 0 ? newOpeningBalance : undefined,
+                      openingDate: subAccountForm.openingDate || undefined,
+                    };
+                    // If opening balance changed, recalculate sub-account balance
+                    if (newOpeningBalance !== oldOpeningBalance) {
+                      const currentBalance = editSubAccountState.sub.balance;
+                      updates.balance =
+                        currentBalance - oldOpeningBalance + newOpeningBalance;
+                    }
                     editSubAccount(
                       editSubAccountState.parentId,
                       editSubAccountState.sub.id,
-                      {
-                        name: subName,
-                        color: subAccountForm.color || undefined,
-                      },
+                      updates,
                     );
                     toast.success("Sub-account updated");
                     setEditSubAccountState(null);
@@ -2633,19 +2691,22 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               <>
                 {form.preset === "Custom" && (
                   <div>
-                    <Label>Account Name</Label>
-                    <Input
-                      value={form.customName}
-                      onChange={(e) =>
-                        setForm((prev) => ({
-                          ...prev,
-                          customName: e.target.value,
-                        }))
-                      }
-                      placeholder="e.g. HSBC Savings"
-                      className="mt-1"
-                      data-ocid="accounts.add.input"
-                    />
+                    <div className="floating-label-group">
+                      <input
+                        id="acc-custom-name"
+                        type="text"
+                        value={form.customName}
+                        onChange={(e) =>
+                          setForm((prev) => ({
+                            ...prev,
+                            customName: e.target.value,
+                          }))
+                        }
+                        placeholder=" "
+                        data-ocid="accounts.add.input"
+                      />
+                      <label htmlFor="acc-custom-name">Account Name</label>
+                    </div>
                   </div>
                 )}
 
@@ -2678,22 +2739,27 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                 )}
 
                 <div>
-                  <Label>
-                    {form.type === "credit"
-                      ? "Current Balance Owed"
-                      : "Current Balance"}
-                  </Label>
-                  <Input
-                    type="number"
-                    value={form.balance}
-                    onChange={(e) =>
-                      setForm((prev) => ({ ...prev, balance: e.target.value }))
-                    }
-                    placeholder="0.00"
-                    min="0"
-                    className="mt-1"
-                    data-ocid="accounts.add_balance.input"
-                  />
+                  <div className="floating-label-group">
+                    <input
+                      id="acc-balance"
+                      type="number"
+                      value={form.balance}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          balance: e.target.value,
+                        }))
+                      }
+                      placeholder=" "
+                      min="0"
+                      data-ocid="accounts.add_balance.input"
+                    />
+                    <label htmlFor="acc-balance">
+                      {form.type === "credit"
+                        ? "Current Balance Owed"
+                        : "Current Balance"}
+                    </label>
+                  </div>
                 </div>
 
                 {form.type === "credit" && (
@@ -2838,33 +2904,41 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               </Select>
             </div>
             <div>
-              <Label>Amount</Label>
-              <Input
-                type="number"
-                value={transferForm.amount}
-                onChange={(e) =>
-                  setTransferForm((prev) => ({
-                    ...prev,
-                    amount: e.target.value,
-                  }))
-                }
-                placeholder="0.00"
-                min="0"
-                className="mt-1"
-                data-ocid="accounts.transfer_amount.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="transfer-amount"
+                  type="number"
+                  value={transferForm.amount}
+                  onChange={(e) =>
+                    setTransferForm((prev) => ({
+                      ...prev,
+                      amount: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  min="0"
+                  data-ocid="accounts.transfer_amount.input"
+                />
+                <label htmlFor="transfer-amount">Amount</label>
+              </div>
             </div>
             <div>
-              <Label>Note (optional)</Label>
-              <Input
-                value={transferForm.note}
-                onChange={(e) =>
-                  setTransferForm((prev) => ({ ...prev, note: e.target.value }))
-                }
-                placeholder="e.g. Weekly allowance"
-                className="mt-1"
-                data-ocid="accounts.transfer_note.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="transfer-note"
+                  type="text"
+                  value={transferForm.note}
+                  onChange={(e) =>
+                    setTransferForm((prev) => ({
+                      ...prev,
+                      note: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  data-ocid="accounts.transfer_note.input"
+                />
+                <label htmlFor="transfer-note">Note (optional)</label>
+              </div>
             </div>
           </div>
           <DialogFooter className="gap-2">
@@ -2904,36 +2978,43 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
           {editAccount && (
             <div className="space-y-4">
               <div>
-                <Label>Account Name</Label>
-                <Input
-                  value={editAccount.name}
-                  onChange={(e) =>
-                    setEditAccount((prev) =>
-                      prev ? { ...prev, name: e.target.value } : prev,
-                    )
-                  }
-                  className="mt-1"
-                  data-ocid="accounts.edit_name.input"
-                />
+                <div className="floating-label-group">
+                  <input
+                    id="edit-acc-name"
+                    type="text"
+                    value={editAccount.name}
+                    onChange={(e) =>
+                      setEditAccount((prev) =>
+                        prev ? { ...prev, name: e.target.value } : prev,
+                      )
+                    }
+                    placeholder=" "
+                    data-ocid="accounts.edit_name.input"
+                  />
+                  <label htmlFor="edit-acc-name">Account Name</label>
+                </div>
               </div>
               <div>
-                <Label>Balance</Label>
-                <Input
-                  type="number"
-                  value={editAccount.balance}
-                  onChange={(e) =>
-                    setEditAccount((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            balance: Number.parseFloat(e.target.value) || 0,
-                          }
-                        : prev,
-                    )
-                  }
-                  className="mt-1"
-                  data-ocid="accounts.edit_balance.input"
-                />
+                <div className="floating-label-group">
+                  <input
+                    id="edit-acc-balance"
+                    type="number"
+                    value={editAccount.balance}
+                    onChange={(e) =>
+                      setEditAccount((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              balance: Number.parseFloat(e.target.value) || 0,
+                            }
+                          : prev,
+                      )
+                    }
+                    placeholder=" "
+                    data-ocid="accounts.edit_balance.input"
+                  />
+                  <label htmlFor="edit-acc-balance">Balance</label>
+                </div>
               </div>
               {editAccount.type === "credit" && (
                 <>
@@ -3043,38 +3124,41 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label htmlFor="iou-person">Person Name</Label>
-              <Input
-                id="iou-person"
-                value={iouForm.personName}
-                onChange={(e) =>
-                  setIouForm((prev) => ({
-                    ...prev,
-                    personName: e.target.value,
-                  }))
-                }
-                placeholder="e.g. John"
-                className="mt-1"
-                data-ocid="accounts.iou.add_person.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="iou-person"
+                  type="text"
+                  value={iouForm.personName}
+                  onChange={(e) =>
+                    setIouForm((prev) => ({
+                      ...prev,
+                      personName: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  data-ocid="accounts.iou.add_person.input"
+                />
+                <label htmlFor="iou-person">Person Name</label>
+              </div>
             </div>
             <div>
-              <Label htmlFor="iou-amount">Amount Lent</Label>
-              <Input
-                id="iou-amount"
-                type="number"
-                value={iouForm.amountLent}
-                onChange={(e) =>
-                  setIouForm((prev) => ({
-                    ...prev,
-                    amountLent: e.target.value,
-                  }))
-                }
-                placeholder="0.00"
-                min="0"
-                className="mt-1"
-                data-ocid="accounts.iou.add_amount.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="iou-amount"
+                  type="number"
+                  value={iouForm.amountLent}
+                  onChange={(e) =>
+                    setIouForm((prev) => ({
+                      ...prev,
+                      amountLent: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  min="0"
+                  data-ocid="accounts.iou.add_amount.input"
+                />
+                <label htmlFor="iou-amount">Amount Lent</label>
+              </div>
             </div>
             <div>
               <Label>Source Account (optional)</Label>
@@ -3100,46 +3184,54 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               </Select>
             </div>
             <div>
-              <Label htmlFor="iou-date-lent">Date Lent</Label>
-              <Input
-                id="iou-date-lent"
-                type="date"
-                value={iouForm.dateLent}
-                onChange={(e) =>
-                  setIouForm((prev) => ({ ...prev, dateLent: e.target.value }))
-                }
-                className="mt-1"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="iou-date-lent"
+                  type="date"
+                  value={iouForm.dateLent}
+                  onChange={(e) =>
+                    setIouForm((prev) => ({
+                      ...prev,
+                      dateLent: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                />
+                <label htmlFor="iou-date-lent">Date Lent</label>
+              </div>
             </div>
             <div>
-              <Label htmlFor="iou-due">Due Date</Label>
-              <Input
-                id="iou-due"
-                type="date"
-                value={iouForm.dueDate}
-                onChange={(e) =>
-                  setIouForm((prev) => ({ ...prev, dueDate: e.target.value }))
-                }
-                className="mt-1"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="iou-due"
+                  type="date"
+                  value={iouForm.dueDate}
+                  onChange={(e) =>
+                    setIouForm((prev) => ({ ...prev, dueDate: e.target.value }))
+                  }
+                  placeholder=" "
+                />
+                <label htmlFor="iou-due">Due Date</label>
+              </div>
             </div>
             <div>
-              <Label htmlFor="iou-interest">Interest % (optional)</Label>
-              <Input
-                id="iou-interest"
-                type="number"
-                value={iouForm.interestPct}
-                onChange={(e) =>
-                  setIouForm((prev) => ({
-                    ...prev,
-                    interestPct: e.target.value,
-                  }))
-                }
-                placeholder="e.g. 5"
-                min="0"
-                className="mt-1"
-                data-ocid="accounts.iou.add_interest.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="iou-interest"
+                  type="number"
+                  value={iouForm.interestPct}
+                  onChange={(e) =>
+                    setIouForm((prev) => ({
+                      ...prev,
+                      interestPct: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  min="0"
+                  data-ocid="accounts.iou.add_interest.input"
+                />
+                <label htmlFor="iou-interest">Interest % (optional)</label>
+              </div>
             </div>
           </div>
           <DialogFooter className="gap-2">
@@ -3562,41 +3654,47 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
           {editIOUData && (
             <div className="space-y-4">
               <div>
-                <Label>Person Name</Label>
-                <input
-                  type="text"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                  style={{ borderColor: "oklch(var(--border))" }}
-                  value={editIOUPersonName}
-                  onChange={(e) => setEditIOUPersonName(e.target.value)}
-                  data-ocid="accounts.iou.edit.input"
-                />
+                <div className="floating-label-group">
+                  <input
+                    id="edit-iou-person"
+                    type="text"
+                    value={editIOUPersonName}
+                    onChange={(e) => setEditIOUPersonName(e.target.value)}
+                    placeholder=" "
+                    data-ocid="accounts.iou.edit.input"
+                  />
+                  <label htmlFor="edit-iou-person">Person Name</label>
+                </div>
               </div>
               <div>
-                <Label>Amount Owed</Label>
-                <input
-                  type="number"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                  style={{ borderColor: "oklch(var(--border))" }}
-                  value={editIOUAmount}
-                  onChange={(e) => {
-                    setEditIOUAmount(e.target.value);
-                    setEditIOUTotalBillChanged(null);
-                    setEditIOUNewTotal("");
-                  }}
-                  data-ocid="accounts.iou.edit.amount.input"
-                />
+                <div className="floating-label-group">
+                  <input
+                    id="edit-iou-amount"
+                    type="number"
+                    value={editIOUAmount}
+                    onChange={(e) => {
+                      setEditIOUAmount(e.target.value);
+                      setEditIOUTotalBillChanged(null);
+                      setEditIOUNewTotal("");
+                    }}
+                    placeholder=" "
+                    data-ocid="accounts.iou.edit.amount.input"
+                  />
+                  <label htmlFor="edit-iou-amount">Amount Owed</label>
+                </div>
               </div>
               <div>
-                <Label>Due Date</Label>
-                <input
-                  type="date"
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                  style={{ borderColor: "oklch(var(--border))" }}
-                  value={editIOUDueDate}
-                  onChange={(e) => setEditIOUDueDate(e.target.value)}
-                  data-ocid="accounts.iou.edit.due_date.input"
-                />
+                <div className="floating-label-group">
+                  <input
+                    id="edit-iou-due"
+                    type="date"
+                    value={editIOUDueDate}
+                    onChange={(e) => setEditIOUDueDate(e.target.value)}
+                    placeholder=" "
+                    data-ocid="accounts.iou.edit.due_date.input"
+                  />
+                  <label htmlFor="edit-iou-due">Due Date</label>
+                </div>
               </div>
 
               {/* Show total bill change prompt if this IOU has a linked transaction and amount changed */}
@@ -3667,16 +3765,19 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                     </div>
                     {editIOUTotalBillChanged === true && (
                       <div>
-                        <Label>New Total Bill Amount</Label>
-                        <input
-                          type="number"
-                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                          style={{ borderColor: "oklch(var(--border))" }}
-                          placeholder="Enter new total"
-                          value={editIOUNewTotal}
-                          onChange={(e) => setEditIOUNewTotal(e.target.value)}
-                          data-ocid="accounts.iou.edit.new_total.input"
-                        />
+                        <div className="floating-label-group">
+                          <input
+                            id="iou-new-total"
+                            type="number"
+                            placeholder=" "
+                            value={editIOUNewTotal}
+                            onChange={(e) => setEditIOUNewTotal(e.target.value)}
+                            data-ocid="accounts.iou.edit.new_total.input"
+                          />
+                          <label htmlFor="iou-new-total">
+                            New Total Bill Amount
+                          </label>
+                        </div>
                         {editIOUNewTotal && Number(editIOUNewTotal) > 0 && (
                           <p className="text-xs text-muted-foreground mt-1">
                             Your share will be ₱

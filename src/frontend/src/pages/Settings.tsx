@@ -619,34 +619,40 @@ export function Settings() {
   };
 
   return (
-    <div className="pb-24 px-4 pt-2 fade-in">
+    <div className="pb-24 px-4 pt-2 animate-spring-in">
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-xl font-bold text-foreground">Settings</h1>
+        <h1 className="text-xl font-display font-bold text-foreground">
+          Settings
+        </h1>
         <HelpSheet section="settings" language={config?.language ?? "en"} />
       </div>
       {/* Profile */}
       <Section title={t("profile")}>
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="sname">{t("name")}</Label>
-            <Input
+        <div className="space-y-4">
+          <div className="floating-label-group">
+            <input
               id="sname"
+              type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="mt-1"
+              placeholder=" "
               data-ocid="settings.name.input"
             />
+            <label htmlFor="sname">{t("name")}</label>
           </div>
           <div>
-            <Label htmlFor="ssalary">{t("salary")}</Label>
-            <div className="flex gap-2 mt-1">
-              <Input
-                id="ssalary"
-                type="number"
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
-                data-ocid="settings.salary.input"
-              />
+            <div className="flex gap-2">
+              <div className="floating-label-group flex-1">
+                <input
+                  id="ssalary"
+                  type="number"
+                  value={salary}
+                  onChange={(e) => setSalary(e.target.value)}
+                  placeholder=" "
+                  data-ocid="settings.salary.input"
+                />
+                <label htmlFor="ssalary">{t("salary")}</label>
+              </div>
               <select
                 className="px-2 rounded-lg border border-border bg-card text-foreground text-sm"
                 value={config?.currency ?? "PHP"}
@@ -702,14 +708,18 @@ export function Settings() {
           )}
         </div>
         <div className="flex gap-2">
-          <Input
-            value={newChip}
-            onChange={(e) => setNewChip(e.target.value)}
-            placeholder="e.g. Sideline, Pension"
-            className="flex-1 text-sm"
-            onKeyDown={(e) => e.key === "Enter" && handleAddChip()}
-            data-ocid="settings.income_source.input"
-          />
+          <div className="floating-label-group flex-1">
+            <input
+              type="text"
+              id="new-income-chip"
+              value={newChip}
+              onChange={(e) => setNewChip(e.target.value)}
+              placeholder=" "
+              onKeyDown={(e) => e.key === "Enter" && handleAddChip()}
+              data-ocid="settings.income_source.input"
+            />
+            <label htmlFor="new-income-chip">e.g. Sideline, Pension</label>
+          </div>
           <Button
             size="sm"
             onClick={handleAddChip}
@@ -1411,40 +1421,46 @@ export function Settings() {
             {config?.period === "custom" && (
               <>
                 <div className="mb-3">
-                  <Label className="text-xs">Start Date</Label>
-                  <Input
-                    type="date"
-                    value={config.customStartDate ?? config.startDate ?? ""}
-                    onChange={(e) =>
-                      setConfig((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              customStartDate: e.target.value,
-                              startDate: e.target.value,
-                            }
-                          : prev,
-                      )
-                    }
-                    className="mt-1"
-                    data-ocid="settings.custom_start_date.input"
-                  />
+                  <div className="floating-label-group">
+                    <input
+                      id="custom-start-date"
+                      type="date"
+                      value={config.customStartDate ?? config.startDate ?? ""}
+                      onChange={(e) =>
+                        setConfig((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                customStartDate: e.target.value,
+                                startDate: e.target.value,
+                              }
+                            : prev,
+                        )
+                      }
+                      placeholder=" "
+                      data-ocid="settings.custom_start_date.input"
+                    />
+                    <label htmlFor="custom-start-date">Start Date</label>
+                  </div>
                 </div>
                 <div className="mb-3">
-                  <Label className="text-xs">End Date</Label>
-                  <Input
-                    type="date"
-                    value={config.customEndDate ?? ""}
-                    onChange={(e) =>
-                      setConfig((prev) =>
-                        prev
-                          ? { ...prev, customEndDate: e.target.value }
-                          : prev,
-                      )
-                    }
-                    className="mt-1"
-                    data-ocid="settings.custom_end_date.input"
-                  />
+                  <div className="floating-label-group">
+                    <input
+                      id="custom-end-date"
+                      type="date"
+                      value={config.customEndDate ?? ""}
+                      onChange={(e) =>
+                        setConfig((prev) =>
+                          prev
+                            ? { ...prev, customEndDate: e.target.value }
+                            : prev,
+                        )
+                      }
+                      placeholder=" "
+                      data-ocid="settings.custom_end_date.input"
+                    />
+                    <label htmlFor="custom-end-date">End Date</label>
+                  </div>
                 </div>
               </>
             )}
@@ -1497,10 +1513,10 @@ export function Settings() {
                 </div>
 
                 {nextPeriodStep === 1 && (
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs">Start Date</Label>
-                      <Input
+                  <div className="space-y-3">
+                    <div className="floating-label-group">
+                      <input
+                        id="np-start-date"
                         type="date"
                         value={nextPeriodForm.startDate}
                         onChange={(e) =>
@@ -1509,13 +1525,14 @@ export function Settings() {
                             startDate: e.target.value,
                           }))
                         }
-                        className="mt-1 h-8 text-sm"
+                        placeholder=" "
                         data-ocid="settings.next_period.start_date.input"
                       />
+                      <label htmlFor="np-start-date">Start Date</label>
                     </div>
-                    <div>
-                      <Label className="text-xs">End Date</Label>
-                      <Input
+                    <div className="floating-label-group">
+                      <input
+                        id="np-end-date"
                         type="date"
                         value={nextPeriodForm.endDate}
                         min={nextPeriodForm.startDate || undefined}
@@ -1525,13 +1542,14 @@ export function Settings() {
                             endDate: e.target.value,
                           }))
                         }
-                        className="mt-1 h-8 text-sm"
+                        placeholder=" "
                         data-ocid="settings.next_period.end_date.input"
                       />
+                      <label htmlFor="np-end-date">End Date</label>
                     </div>
-                    <div>
-                      <Label className="text-xs">Expected Income</Label>
-                      <Input
+                    <div className="floating-label-group">
+                      <input
+                        id="np-income"
                         type="number"
                         value={nextPeriodForm.expectedIncome}
                         onChange={(e) =>
@@ -1540,10 +1558,10 @@ export function Settings() {
                             expectedIncome: e.target.value,
                           }))
                         }
-                        placeholder="e.g. 19000"
-                        className="mt-1 h-8 text-sm"
+                        placeholder=" "
                         data-ocid="settings.next_period.income.input"
                       />
+                      <label htmlFor="np-income">Expected Income</label>
                     </div>
                   </div>
                 )}
@@ -2758,11 +2776,8 @@ function Section({
   children,
 }: { title: string; children: React.ReactNode }) {
   return (
-    <div
-      className="rounded-2xl border border-border p-4 mb-4"
-      style={{ backgroundColor: "oklch(var(--card))" }}
-    >
-      <h2 className="text-sm font-semibold text-muted-foreground mb-3">
+    <div className="glass-card p-4 mb-4">
+      <h2 className="text-sm font-display font-semibold text-muted-foreground mb-3">
         {title}
       </h2>
       {children}

@@ -81,6 +81,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
     projectionSettings,
     updateProjectionSettings,
     accounts,
+    transactions,
   } = useFinanceData();
 
   const currency = config?.currency ?? "PHP";
@@ -378,7 +379,10 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
   const getGoalInfo = (goal: Goal) => {
     const monthly =
       allSubs.find((s) => s.id === goal.subCategoryId)?.monthlyBudget ?? 0;
-    const saved = goal.currentSaved ?? 0;
+    const linkedTxSum = transactions
+      .filter((tx) => tx.goalId === goal.id && tx.type === "expense")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    const saved = (goal.alreadySavedAmount ?? 0) + linkedTxSum;
     const remaining = Math.max(0, goal.targetAmount - saved);
     const progressPct =
       goal.targetAmount > 0
@@ -428,13 +432,9 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
   const customMonthsYears = (customMonths / 12).toFixed(1);
 
   return (
-    <div className="pb-24 px-4 pt-2 fade-in">
+    <div className="pb-24 px-4 pt-2 animate-spring-in">
       {/* Monthly Income Input */}
-      <div
-        className="rounded-2xl border border-border mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
-        data-ocid="projections.income.card"
-      >
+      <div className="glass-card mb-4" data-ocid="projections.income.card">
         <button
           type="button"
           className="w-full flex items-center justify-between p-4"
@@ -461,22 +461,24 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
             <div>
               <Label>Monthly Income for Projections</Label>
               <div className="flex items-center gap-2 mt-1">
-                <Input
-                  type="number"
-                  value={projectionSettings.monthlyIncome}
-                  onChange={(e) =>
-                    updateProjectionSettings({
-                      monthlyIncome:
-                        Number.parseFloat(e.target.value) || defaultSalary,
-                    })
-                  }
-                  placeholder={defaultSalary.toString()}
-                  className="flex-1"
-                  data-ocid="projections.income.input"
-                />
-                <span className="text-xs text-muted-foreground flex-shrink-0">
-                  {currency}
-                </span>
+                <div className="floating-label-group flex-1">
+                  <input
+                    id="proj-income"
+                    type="number"
+                    value={projectionSettings.monthlyIncome}
+                    onChange={(e) =>
+                      updateProjectionSettings({
+                        monthlyIncome:
+                          Number.parseFloat(e.target.value) || defaultSalary,
+                      })
+                    }
+                    placeholder=" "
+                    data-ocid="projections.income.input"
+                  />
+                  <label htmlFor="proj-income">
+                    Monthly Income ({currency})
+                  </label>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Default from salary: {pAmt(defaultSalary)}
@@ -514,11 +516,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
       </div>
 
       {/* Scenario Sliders */}
-      <div
-        className="rounded-2xl border border-border mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
-        data-ocid="projections.scenario.card"
-      >
+      <div className="glass-card mb-4" data-ocid="projections.scenario.card">
         <button
           type="button"
           className="w-full flex items-center justify-between p-4"
@@ -627,11 +625,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
       </div>
 
       {/* Charts */}
-      <div
-        className="rounded-2xl border border-border mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
-        data-ocid="projections.charts.card"
-      >
+      <div className="glass-card mb-4" data-ocid="projections.charts.card">
         <div className="flex items-center justify-between p-4 gap-2 flex-wrap">
           <button
             type="button"
@@ -919,11 +913,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
       </div>
 
       {/* Goals */}
-      <div
-        className="rounded-2xl border border-border mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
-        data-ocid="projections.goals.card"
-      >
+      <div className="glass-card mb-4" data-ocid="projections.goals.card">
         <div className="flex items-center justify-between p-4">
           <button
             type="button"
@@ -982,10 +972,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                   return (
                     <div
                       key={goal.id}
-                      className="rounded-xl border border-border p-3"
-                      style={{
-                        backgroundColor: "oklch(var(--secondary) / 0.5)",
-                      }}
+                      className="glass-card-sm card-hover p-3"
                       data-ocid={`projections.goal.item.${idx + 1}`}
                     >
                       <div className="flex items-start justify-between gap-2">
@@ -1109,8 +1096,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
 
       {/* Subcategory Breakdown */}
       <div
-        className="rounded-2xl border border-border mb-4"
-        style={{ backgroundColor: "oklch(var(--card))" }}
+        className="glass-card mb-4"
         data-ocid="projections.sub_breakdown.card"
       >
         <button
@@ -1378,9 +1364,10 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Goal Label</Label>
-              <Input
+            <div className="floating-label-group">
+              <input
+                id="edit-goal-label"
+                type="text"
                 value={editGoalForm.label}
                 onChange={(e) =>
                   setEditGoalForm((prev) => ({
@@ -1388,14 +1375,14 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                     label: e.target.value,
                   }))
                 }
-                placeholder="e.g. Emergency Fund"
-                className="mt-1"
+                placeholder=" "
                 data-ocid="projections.edit_goal_label.input"
               />
+              <label htmlFor="edit-goal-label">Goal Label</label>
             </div>
-            <div>
-              <Label>Target Amount ({currency})</Label>
-              <Input
+            <div className="floating-label-group">
+              <input
+                id="edit-goal-amount"
                 type="number"
                 value={editGoalForm.targetAmount}
                 onChange={(e) =>
@@ -1404,28 +1391,34 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                     targetAmount: e.target.value,
                   }))
                 }
-                placeholder="e.g. 50000"
+                placeholder=" "
                 min="0"
-                className="mt-1"
                 data-ocid="projections.edit_goal_amount.input"
               />
+              <label htmlFor="edit-goal-amount">
+                Target Amount ({currency})
+              </label>
             </div>
             <div>
-              <Label>Already saved (optional)</Label>
-              <Input
-                type="number"
-                value={editGoalForm.currentSaved}
-                onChange={(e) =>
-                  setEditGoalForm((prev) => ({
-                    ...prev,
-                    currentSaved: e.target.value,
-                  }))
-                }
-                placeholder="e.g. 120000"
-                min="0"
-                className="mt-1"
-                data-ocid="projections.edit_goal_saved.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="edit-goal-saved"
+                  type="number"
+                  value={editGoalForm.currentSaved}
+                  onChange={(e) =>
+                    setEditGoalForm((prev) => ({
+                      ...prev,
+                      currentSaved: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  min="0"
+                  data-ocid="projections.edit_goal_saved.input"
+                />
+                <label htmlFor="edit-goal-saved">
+                  Already saved (optional)
+                </label>
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 How much you&apos;ve already saved toward this goal
               </p>
@@ -1553,21 +1546,22 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label>Goal Label</Label>
-              <Input
+            <div className="floating-label-group">
+              <input
+                id="goal-label"
+                type="text"
                 value={goalForm.label}
                 onChange={(e) =>
                   setGoalForm((prev) => ({ ...prev, label: e.target.value }))
                 }
-                placeholder="e.g. Emergency Fund"
-                className="mt-1"
+                placeholder=" "
                 data-ocid="projections.goal_label.input"
               />
+              <label htmlFor="goal-label">Goal Label</label>
             </div>
-            <div>
-              <Label>Target Amount ({currency})</Label>
-              <Input
+            <div className="floating-label-group">
+              <input
+                id="goal-amount"
                 type="number"
                 value={goalForm.targetAmount}
                 onChange={(e) =>
@@ -1576,28 +1570,30 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                     targetAmount: e.target.value,
                   }))
                 }
-                placeholder="e.g. 50000"
+                placeholder=" "
                 min="0"
-                className="mt-1"
                 data-ocid="projections.goal_amount.input"
               />
+              <label htmlFor="goal-amount">Target Amount ({currency})</label>
             </div>
             <div>
-              <Label>Already saved (optional)</Label>
-              <Input
-                type="number"
-                value={goalForm.currentSaved}
-                onChange={(e) =>
-                  setGoalForm((prev) => ({
-                    ...prev,
-                    currentSaved: e.target.value,
-                  }))
-                }
-                placeholder="e.g. 120000"
-                min="0"
-                className="mt-1"
-                data-ocid="projections.goal_saved.input"
-              />
+              <div className="floating-label-group">
+                <input
+                  id="goal-saved"
+                  type="number"
+                  value={goalForm.currentSaved}
+                  onChange={(e) =>
+                    setGoalForm((prev) => ({
+                      ...prev,
+                      currentSaved: e.target.value,
+                    }))
+                  }
+                  placeholder=" "
+                  min="0"
+                  data-ocid="projections.goal_saved.input"
+                />
+                <label htmlFor="goal-saved">Already saved (optional)</label>
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 How much you&apos;ve already saved toward this goal
               </p>

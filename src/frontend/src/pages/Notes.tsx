@@ -126,28 +126,32 @@ function NoteEditor({
 
       {/* Title */}
       <div>
-        <Label htmlFor="note-title">Title</Label>
-        <Input
-          id="note-title"
-          value={note.title ?? ""}
-          onChange={(e) => onChange({ ...note, title: e.target.value })}
-          placeholder="Optional title..."
-          className="mt-1"
-          data-ocid="notes.input"
-        />
+        <div className="floating-label-group">
+          <input
+            id="note-title"
+            type="text"
+            value={note.title ?? ""}
+            onChange={(e) => onChange({ ...note, title: e.target.value })}
+            placeholder=" "
+            data-ocid="notes.input"
+          />
+          <label htmlFor="note-title">Title (optional)</label>
+        </div>
       </div>
 
       {/* Body */}
       <div>
-        <Label htmlFor="note-body">Notes</Label>
-        <Textarea
-          id="note-body"
-          value={note.body ?? ""}
-          onChange={(e) => onChange({ ...note, body: e.target.value })}
-          placeholder="Write anything here..."
-          className="mt-1 min-h-[100px] resize-none"
-          data-ocid="notes.textarea"
-        />
+        <div className="floating-label-group">
+          <textarea
+            id="note-body"
+            value={note.body ?? ""}
+            onChange={(e) => onChange({ ...note, body: e.target.value })}
+            placeholder=" "
+            style={{ minHeight: "100px", resize: "none" }}
+            data-ocid="notes.textarea"
+          />
+          <label htmlFor="note-body">Notes</label>
+        </div>
       </div>
 
       {/* Checklist */}
@@ -303,12 +307,12 @@ export function Notes() {
   };
 
   return (
-    <div className="pb-28 px-4 pt-2 fade-in">
+    <div className="pb-28 px-4 pt-2 animate-spring-in">
       {/* Search */}
       <div className="relative mb-4">
         <Search
           size={16}
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10"
         />
         <Input
           value={search}
@@ -322,8 +326,7 @@ export function Notes() {
       {/* Notes grid */}
       {filtered.length === 0 ? (
         <div
-          className="flex flex-col items-center justify-center py-16 text-center rounded-2xl"
-          style={{ backgroundColor: "oklch(var(--card))" }}
+          className="flex flex-col items-center justify-center py-16 text-center glass-card"
           data-ocid="notes.empty_state"
         >
           <NotebookPen size={40} className="text-muted-foreground mb-3" />
@@ -349,8 +352,7 @@ export function Notes() {
                 type="button"
                 key={note.id}
                 onClick={() => openEdit(note)}
-                className="w-full text-left rounded-2xl border border-border overflow-hidden transition-all active:scale-[0.98]"
-                style={{ backgroundColor: "oklch(var(--card))" }}
+                className="w-full text-left glass-card card-hover overflow-hidden"
                 data-ocid={`notes.item.${idx + 1}`}
               >
                 <div className="flex">
@@ -410,8 +412,7 @@ export function Notes() {
       <button
         type="button"
         onClick={openNew}
-        className="fixed bottom-24 right-4 w-14 h-14 rounded-full flex items-center justify-center shadow-lg z-30 transition-all active:scale-95"
-        style={{ backgroundColor: "oklch(var(--primary))" }}
+        className="fixed bottom-24 right-4 w-14 h-14 rounded-full flex items-center justify-center shadow-lg z-30 transition-spring active:scale-95 gradient-indigo glow-indigo"
         data-ocid="notes.open_modal_button"
       >
         <Plus size={24} className="text-primary-foreground" />
@@ -429,7 +430,7 @@ export function Notes() {
       >
         <SheetContent
           side="bottom"
-          className="max-h-[92vh] overflow-y-auto rounded-t-3xl"
+          className="max-h-[92vh] overflow-y-auto rounded-t-3xl glass-card"
           data-ocid="notes.sheet"
         >
           <SheetHeader className="mb-4">
@@ -452,8 +453,7 @@ export function Notes() {
           style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
         >
           <div
-            className="rounded-2xl p-5 mx-4 max-w-sm w-full"
-            style={{ backgroundColor: "oklch(var(--card))" }}
+            className="glass-card p-5 mx-4 max-w-sm w-full animate-spring-in"
             data-ocid="notes.dialog"
           >
             <h3 className="font-bold text-foreground mb-2">Delete note?</h3>

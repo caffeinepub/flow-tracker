@@ -523,23 +523,42 @@ export function useFinanceData() {
             );
           }
 
-          setAccounts((accs) =>
-            accs.map((a) => {
-              // For sub-accounts: match by parentId (before the ">")
-              // For regular accounts: match by name
-              const matches = isSubAccount
-                ? a.id === txAccount.split(">")[0]
-                : a.name === txAccount;
-              if (!matches) return a;
-              const delta =
-                tx.type === "expense"
-                  ? fullReversal // add back the full debited amount
-                  : tx.type === "income"
-                    ? -tx.amount // deduct what was credited
-                    : 0;
-              return { ...a, balance: a.balance + delta };
-            }),
-          );
+          if (isSubAccount) {
+            // Sub-account: reverse balance directly on the sub-account using composite key
+            setAccounts((accs) =>
+              accs.map((a) => {
+                const [parentId, subId] = txAccount.split(">");
+                if (a.id !== parentId) return a;
+                const delta =
+                  tx.type === "expense"
+                    ? fullReversal
+                    : tx.type === "income"
+                      ? -tx.amount
+                      : 0;
+                return {
+                  ...a,
+                  subAccounts: (a.subAccounts ?? []).map((s) =>
+                    s.id === subId ? { ...s, balance: s.balance + delta } : s,
+                  ),
+                };
+              }),
+            );
+          } else {
+            setAccounts((accs) =>
+              accs.map((a) => {
+                // For regular accounts: match by name or id
+                const matches = a.name === txAccount || a.id === txAccount;
+                if (!matches) return a;
+                const delta =
+                  tx.type === "expense"
+                    ? fullReversal // add back the full debited amount
+                    : tx.type === "income"
+                      ? -tx.amount // deduct what was credited
+                      : 0;
+                return { ...a, balance: a.balance + delta };
+              }),
+            );
+          }
         }
         return prev.filter((t) => t.id !== id);
       });
@@ -852,20 +871,12 @@ export function useFinanceData() {
         prev.map((a) => {
           if (a.id !== parentId) return a;
           const subs = a.subAccounts ?? [];
-          const updated = { ...a, subAccounts: [...subs, newSub] };
-          // Add opening balance to parent if provided
-          if (
-            subAccountData.openingBalance &&
-            subAccountData.openingBalance > 0
-          ) {
-            updated.balance = a.balance + subAccountData.openingBalance;
-          }
-          return updated;
+          // Do NOT add opening balance to parent — getAccountTotal() rolls up sub-account balances
+          return { ...a, subAccounts: [...subs, newSub] };
         }),
       );
-      // Log an income transaction for the opening balance
+      // Log an income transaction for the opening balance (stored with composite key)
       if (subAccountData.openingBalance && subAccountData.openingBalance > 0) {
-        const parentAcc = accounts.find((a) => a.id === parentId);
         const txDate =
           subAccountData.openingDate || new Date().toISOString().split("T")[0];
         setTransactions((prev) => [
@@ -877,14 +888,14 @@ export function useFinanceData() {
             subCategory: "Opening Balance",
             description: `Opening Balance - ${subAccountData.name}`,
             type: "income" as const,
-            account: parentAcc ? `${parentId}>${subId}` : undefined,
+            account: `${parentId}>${subId}`,
             isOpeningBalance: true,
           },
           ...prev,
         ]);
       }
     },
-    [setAccounts, setTransactions, accounts],
+    [setAccounts, setTransactions],
   );
 
   const editSubAccount = useCallback(
@@ -1025,35 +1036,22 @@ export function useFinanceData() {
           );
         }
         // Log a "Save to Goal" transaction in History
+        // Use composite key for sub-accounts so sub-account history filter matches correctly
         const txDate = g.startDate || new Date().toISOString().split("T")[0];
-        setAccounts((prevAccs) => {
-          let accName = "";
-          if (accountId.includes(">")) {
-            const [parentId, subId] = accountId.split(">");
-            const parent = prevAccs.find((a) => a.id === parentId);
-            const sub = (parent?.subAccounts ?? []).find((s) => s.id === subId);
-            accName =
-              parent && sub
-                ? `${parent.name} › ${sub.name}`
-                : (parent?.name ?? "");
-          } else {
-            accName = prevAccs.find((a) => a.id === accountId)?.name ?? "";
-          }
-          setTransactions((prevTxs) => [
-            {
-              id: crypto.randomUUID(),
-              amount: savedAmount,
-              date: txDate,
-              mainCategory: g.subCategoryName,
-              subCategory: g.subCategoryName,
-              description: `Saved toward ${g.label} goal`,
-              type: "income" as const,
-              account: accName,
-            },
-            ...prevTxs,
-          ]);
-          return prevAccs;
-        });
+        const txAccount = accountId; // always store composite key (parentId>subId) or parent ID for sub-account matching
+        setTransactions((prevTxs) => [
+          {
+            id: crypto.randomUUID(),
+            amount: savedAmount,
+            date: txDate,
+            mainCategory: g.subCategoryName,
+            subCategory: g.subCategoryName,
+            description: `Saved toward ${g.label} goal`,
+            type: "income" as const,
+            account: txAccount,
+          },
+          ...prevTxs,
+        ]);
       }
     },
     [setGoals, setAccounts, setTransactions],
@@ -1091,26 +1089,12 @@ export function useFinanceData() {
         const targetAccountId = newAccountId || existing.alreadySavedAccountId;
         if (targetAccountId && delta !== 0) {
           setAccounts((prevAcc) => {
-            let accName = "";
-            if (targetAccountId.includes(">")) {
-              const [parentId, subId] = targetAccountId.split(">");
-              const parent = prevAcc.find((a) => a.id === parentId);
-              const sub = (parent?.subAccounts ?? []).find(
-                (s) => s.id === subId,
-              );
-              accName =
-                parent && sub
-                  ? `${parent.name} › ${sub.name}`
-                  : (parent?.name ?? "");
-            } else {
-              accName =
-                prevAcc.find((a) => a.id === targetAccountId)?.name ?? "";
-            }
             if (delta > 0) {
               const txDate =
                 updates.startDate ||
                 existing.startDate ||
                 new Date().toISOString().split("T")[0];
+              // Store composite key for sub-accounts so sub-account history filter matches
               setTransactions((prevTxs) => [
                 {
                   id: crypto.randomUUID(),
@@ -1120,7 +1104,7 @@ export function useFinanceData() {
                   subCategory: existing.subCategoryName,
                   description: `Updated savings toward ${goalLabel} goal`,
                   type: "income" as const,
-                  account: accName,
+                  account: targetAccountId,
                 },
                 ...prevTxs,
               ]);
@@ -1538,20 +1522,33 @@ export function useFinanceData() {
         if (linkedTx?.account) {
           const txAccount = linkedTx.account;
           const isSubAccount = txAccount.includes(">");
-          setAccounts((accs) =>
-            accs.map((a) => {
-              const matches = isSubAccount
-                ? a.id === txAccount.split(">")[0]
-                : a.name === txAccount;
-              if (!matches) return a;
-              // Reverse the FULL debited amount (your share + IOU share).
-              // The account was originally charged the full bill via debitAccount,
-              // so we must add back both the linked tx amount (your share) and the IOU amount.
-              const fullReversal =
-                iou.amountLent + (linkedTx ? linkedTx.amount : 0);
-              return { ...a, balance: a.balance + fullReversal };
-            }),
-          );
+          // Reverse the FULL debited amount (your share + IOU share).
+          const fullReversal =
+            iou.amountLent + (linkedTx ? linkedTx.amount : 0);
+          if (isSubAccount) {
+            const [parentId, subId] = txAccount.split(">");
+            setAccounts((accs) =>
+              accs.map((a) => {
+                if (a.id !== parentId) return a;
+                return {
+                  ...a,
+                  subAccounts: (a.subAccounts ?? []).map((s) =>
+                    s.id === subId
+                      ? { ...s, balance: s.balance + fullReversal }
+                      : s,
+                  ),
+                };
+              }),
+            );
+          } else {
+            setAccounts((accs) =>
+              accs.map((a) => {
+                const matches = a.name === txAccount || a.id === txAccount;
+                if (!matches) return a;
+                return { ...a, balance: a.balance + fullReversal };
+              }),
+            );
+          }
         }
         setTransactions((prevTx) =>
           prevTx.filter((t) => t.id !== iou.linkedTransactionId),

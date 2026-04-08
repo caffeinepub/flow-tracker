@@ -25,7 +25,6 @@ import { useFinanceData } from "../hooks/useFinanceData";
 import { useTranslation } from "../hooks/useTranslation";
 import { Recurring } from "./Recurring";
 
-// Duration picker types
 type DurationMode = "period" | "month";
 
 export function Reports() {
@@ -44,11 +43,8 @@ export function Reports() {
   } = useFinanceData();
   const currency = config?.currency ?? "PHP";
 
-  // ── Year picker state ───────────────────────────────────────────────────────
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
-
-  // ── YTD state ──────────────────────────────────────────────────────────────
   const [durationMode, setDurationMode] = useState<DurationMode>("period");
   const [selectedPeriodId, setSelectedPeriodId] = useState<string>("current");
   const [selectedMonth, setSelectedMonth] = useState<string>(
@@ -56,7 +52,6 @@ export function Reports() {
   );
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-  // ── Compute available years from all transaction dates ──────────────────────
   const availableYears = useMemo(() => {
     const yearSet = new Set<number>([currentYear]);
     const allTxs = [...transactions];
@@ -65,7 +60,6 @@ export function Reports() {
       const y = Number(tx.date.slice(0, 4));
       if (!Number.isNaN(y)) yearSet.add(y);
     }
-    // Also include year from config.startDate
     if (config?.startDate) {
       const y = Number(config.startDate.slice(0, 4));
       if (!Number.isNaN(y)) yearSet.add(y);
@@ -73,7 +67,6 @@ export function Reports() {
     return Array.from(yearSet).sort((a, b) => b - a);
   }, [transactions, periods, currentYear, config]);
 
-  // ── Filter period chips by selected year ────────────────────────────────────
   const filteredPeriods = useMemo(() => {
     return periods.filter(
       (p) =>
@@ -83,14 +76,11 @@ export function Reports() {
   }, [periods, selectedYear]);
 
   const showCurrentChip = useMemo(() => {
-    // Always show Current if selected year is the current year
     if (selectedYear === currentYear) return true;
-    // Also show if config startDate falls in the selected year
     if (config?.startDate?.slice(0, 4) === String(selectedYear)) return true;
     return false;
   }, [selectedYear, currentYear, config]);
 
-  // ── Available months filtered by selected year ──────────────────────────────
   const availableMonths = useMemo(() => {
     const seen = new Set<string>();
     const allTxs = [...transactions];
@@ -104,12 +94,10 @@ export function Reports() {
       .reverse();
   }, [transactions, periods, selectedYear]);
 
-  // ── Auto-reset selections when year changes ─────────────────────────────────
   const prevYearRef = useRef<number>(selectedYear);
   useEffect(() => {
     const prevYear = prevYearRef.current;
     prevYearRef.current = selectedYear;
-    // Only run reset logic when year actually changes
     if (prevYear === selectedYear) return;
     if (durationMode === "period") {
       if (selectedPeriodId !== "current") {
@@ -140,20 +128,17 @@ export function Reports() {
     availableMonths,
   ]);
 
-  // ── Duration-filtered transactions ─────────────────────────────────────────
   const durationTxs = useMemo(() => {
     if (durationMode === "period") {
       if (selectedPeriodId === "current") return currentTransactions;
       const p = periods.find((p) => p.id === selectedPeriodId);
       return p ? p.transactions : [];
     }
-    // month mode
     try {
       const [y, m] = selectedMonth.split("-").map(Number);
       const monthDate = new Date(y, m - 1, 1);
       const start = startOfMonth(monthDate);
       const end = endOfMonth(monthDate);
-      // Search across all transactions (current + archived)
       const allTxs: typeof transactions = [];
       const seen = new Set<string>();
       for (const tx of transactions) {
@@ -186,7 +171,6 @@ export function Reports() {
     transactions,
   ]);
 
-  // ── Duration label for header ───────────────────────────────────────────────
   const durationLabel = useMemo(() => {
     if (durationMode === "period") {
       if (selectedPeriodId === "current") {
@@ -214,34 +198,32 @@ export function Reports() {
     periods,
   ]);
 
-  // ── YTD computed data ───────────────────────────────────────────────────────
   const ytdData = useMemo(() => {
     const txs = durationTxs;
     const incomeTotal = txs
       .filter(
-        (t) =>
-          t.type === "income" &&
-          t.mainCategory !== "Transfer" &&
-          !t.isOpeningBalance &&
-          t.subCategory !== "Opening Balance" &&
-          !t.description?.toLowerCase().includes("opening balance"),
+        (tx) =>
+          tx.type === "income" &&
+          tx.mainCategory !== "Transfer" &&
+          !tx.isOpeningBalance &&
+          tx.subCategory !== "Opening Balance" &&
+          !tx.description?.toLowerCase().includes("opening balance"),
       )
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, tx) => s + tx.amount, 0);
 
-    // Income breakdown by source chip
     const incomeBySource = txs
       .filter(
-        (t) =>
-          t.type === "income" &&
-          t.mainCategory !== "Transfer" &&
-          !t.isOpeningBalance &&
-          t.subCategory !== "Opening Balance" &&
-          !t.description?.toLowerCase().includes("opening balance"),
+        (tx) =>
+          tx.type === "income" &&
+          tx.mainCategory !== "Transfer" &&
+          !tx.isOpeningBalance &&
+          tx.subCategory !== "Opening Balance" &&
+          !tx.description?.toLowerCase().includes("opening balance"),
       )
       .reduce(
-        (acc, t) => {
-          const key = t.subCategory || "Other";
-          acc[key] = (acc[key] || 0) + t.amount;
+        (acc, tx) => {
+          const key = tx.subCategory || "Other";
+          acc[key] = (acc[key] || 0) + tx.amount;
           return acc;
         },
         {} as Record<string, number>,
@@ -249,13 +231,13 @@ export function Reports() {
 
     const categoryTotals = customCategories.map((cat) => {
       const total = txs
-        .filter((t) => t.type === "expense" && t.mainCategory === cat.name)
-        .reduce((s, t) => s + t.amount, 0);
+        .filter((tx) => tx.type === "expense" && tx.mainCategory === cat.name)
+        .reduce((s, tx) => s + tx.amount, 0);
       const pctOfIncome = incomeTotal > 0 ? (total / incomeTotal) * 100 : 0;
       const subTotals = cat.subCategories.map((sub) => {
         const subTotal = txs
-          .filter((t) => t.type === "expense" && t.subCategory === sub.name)
-          .reduce((s, t) => s + t.amount, 0);
+          .filter((tx) => tx.type === "expense" && tx.subCategory === sub.name)
+          .reduce((s, tx) => s + tx.amount, 0);
         const subPct = incomeTotal > 0 ? (subTotal / incomeTotal) * 100 : 0;
         return { sub, total: subTotal, pctOfIncome: subPct };
       });
@@ -265,7 +247,6 @@ export function Reports() {
     return { incomeTotal, incomeBySource, categoryTotals };
   }, [durationTxs, customCategories]);
 
-  // ── Comparison / trend data (uses current period only, unchanged) ───────────
   const comparisonData = useMemo(() => {
     const lastPeriod = periods[0];
     return customCategories.map((cat) => ({
@@ -318,7 +299,6 @@ export function Reports() {
     config,
   ]);
 
-  // ── Insights (current period only) ─────────────────────────────────────────
   const insights = useMemo(() => {
     const items: string[] = [];
     for (const cat of customCategories) {
@@ -385,30 +365,33 @@ export function Reports() {
     itemStyle: { color: "oklch(var(--muted-foreground))" },
   };
 
-  // ── Selected category data ──────────────────────────────────────────────────
   const activeCatData = selectedCategory
     ? ytdData.categoryTotals.find((c) => c.cat.name === selectedCategory)
     : null;
 
+  // Pill chip helpers
+  const activePill =
+    "flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all bg-primary/15 text-primary border border-primary/40";
+  const inactivePill =
+    "flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-all glass-card-sm text-muted-foreground border-0 hover:text-foreground";
+
   return (
-    <div className="pb-24 fade-in">
+    <div className="pb-24 animate-spring-in">
       <Tabs defaultValue="reports" className="w-full">
-        <div
-          className="sticky top-0 z-20 px-4 pt-2 pb-2 border-b border-border"
-          style={{ backgroundColor: "oklch(var(--background))" }}
-        >
+        {/* Tab header */}
+        <div className="sticky top-0 z-20 px-4 pt-2 pb-2 border-b border-border bg-background/80 backdrop-blur-md">
           <div className="flex items-center gap-2">
-            <TabsList className="flex-1">
+            <TabsList className="flex-1 glass-card-sm border-0">
               <TabsTrigger
                 value="reports"
-                className="flex-1"
+                className="flex-1 font-display text-xs font-semibold"
                 data-ocid="reports.reports.tab"
               >
                 {t("reports")}
               </TabsTrigger>
               <TabsTrigger
                 value="recurring"
-                className="flex-1"
+                className="flex-1 font-display text-xs font-semibold"
                 data-ocid="reports.recurring.tab"
               >
                 Recurring
@@ -418,16 +401,12 @@ export function Reports() {
           </div>
         </div>
 
-        <TabsContent value="reports" className="px-4 pt-4 mt-0">
-          {/* ── Summary Section (filterable) ───────────────────────────── */}
-          <div
-            className="rounded-2xl border border-border p-4 mb-5"
-            style={{ backgroundColor: "oklch(var(--card))" }}
-            data-ocid="reports.ytd.card"
-          >
+        <TabsContent value="reports" className="px-4 pt-4 mt-0 space-y-4">
+          {/* ── Summary Section ─────────────────────────────────────── */}
+          <div className="glass-card p-4" data-ocid="reports.ytd.card">
             {/* Header */}
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-muted-foreground">
+              <h2 className="text-sm font-bold font-display text-foreground">
                 Summary
               </h2>
               <span className="text-xs text-muted-foreground">
@@ -445,21 +424,11 @@ export function Reports() {
                   type="button"
                   key={yr}
                   onClick={() => setSelectedYear(yr)}
-                  className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold border transition-all"
-                  style={{
-                    backgroundColor:
-                      selectedYear === yr
-                        ? "oklch(var(--foreground))"
-                        : "oklch(var(--secondary))",
-                    color:
-                      selectedYear === yr
-                        ? "oklch(var(--background))"
-                        : "oklch(var(--muted-foreground))",
-                    borderColor:
-                      selectedYear === yr
-                        ? "oklch(var(--foreground))"
-                        : "oklch(var(--border))",
-                  }}
+                  className={
+                    selectedYear === yr
+                      ? "flex-shrink-0 px-3 py-1 rounded-full text-xs font-bold transition-all bg-foreground text-background"
+                      : "flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all glass-card-sm text-muted-foreground hover:text-foreground"
+                  }
                   data-ocid="reports.year.toggle"
                 >
                   {yr}
@@ -468,13 +437,11 @@ export function Reports() {
             </div>
 
             {/* Duration mode toggle */}
-            <div className="flex gap-1 mb-3 p-0.5 rounded-lg bg-muted">
+            <div className="flex gap-1 mb-3 p-0.5 rounded-xl glass-card-sm">
               <button
                 type="button"
-                onClick={() => {
-                  setDurationMode("period");
-                }}
-                className="flex-1 py-1 text-xs font-medium rounded-md transition-all"
+                onClick={() => setDurationMode("period")}
+                className="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all"
                 style={{
                   backgroundColor:
                     durationMode === "period"
@@ -486,7 +453,7 @@ export function Reports() {
                       : "oklch(var(--muted-foreground))",
                   boxShadow:
                     durationMode === "period"
-                      ? "0 1px 3px oklch(0 0 0 / 0.15)"
+                      ? "0 1px 4px oklch(0 0 0 / 0.12)"
                       : "none",
                 }}
               >
@@ -494,10 +461,8 @@ export function Reports() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setDurationMode("month");
-                }}
-                className="flex-1 py-1 text-xs font-medium rounded-md transition-all"
+                onClick={() => setDurationMode("month")}
+                className="flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all"
                 style={{
                   backgroundColor:
                     durationMode === "month"
@@ -509,7 +474,7 @@ export function Reports() {
                       : "oklch(var(--muted-foreground))",
                   boxShadow:
                     durationMode === "month"
-                      ? "0 1px 3px oklch(0 0 0 / 0.15)"
+                      ? "0 1px 4px oklch(0 0 0 / 0.12)"
                       : "none",
                 }}
               >
@@ -517,28 +482,16 @@ export function Reports() {
               </button>
             </div>
 
-            {/* Period picker — filtered by selected year */}
+            {/* Period picker */}
             {durationMode === "period" && (
               <div className="flex gap-1.5 overflow-x-auto pb-1 mb-3 scrollbar-none">
                 {showCurrentChip && (
                   <button
                     type="button"
                     onClick={() => setSelectedPeriodId("current")}
-                    className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
-                    style={{
-                      backgroundColor:
-                        selectedPeriodId === "current"
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--secondary))",
-                      color:
-                        selectedPeriodId === "current"
-                          ? "oklch(var(--primary-foreground))"
-                          : "oklch(var(--foreground))",
-                      borderColor:
-                        selectedPeriodId === "current"
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--border))",
-                    }}
+                    className={
+                      selectedPeriodId === "current" ? activePill : inactivePill
+                    }
                   >
                     Current
                   </button>
@@ -548,21 +501,9 @@ export function Reports() {
                     type="button"
                     key={p.id}
                     onClick={() => setSelectedPeriodId(p.id)}
-                    className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
-                    style={{
-                      backgroundColor:
-                        selectedPeriodId === p.id
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--secondary))",
-                      color:
-                        selectedPeriodId === p.id
-                          ? "oklch(var(--primary-foreground))"
-                          : "oklch(var(--foreground))",
-                      borderColor:
-                        selectedPeriodId === p.id
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--border))",
-                    }}
+                    className={
+                      selectedPeriodId === p.id ? activePill : inactivePill
+                    }
                   >
                     {format(parseISO(p.startDate), "MMM d")}–
                     {format(parseISO(p.endDate), "MMM d")}
@@ -576,7 +517,7 @@ export function Reports() {
               </div>
             )}
 
-            {/* Month picker — filtered by selected year */}
+            {/* Month picker */}
             {durationMode === "month" && (
               <div className="mb-3">
                 {availableMonths.length === 0 ? (
@@ -590,21 +531,9 @@ export function Reports() {
                         type="button"
                         key={m}
                         onClick={() => setSelectedMonth(m)}
-                        className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
-                        style={{
-                          backgroundColor:
-                            selectedMonth === m
-                              ? "oklch(var(--primary))"
-                              : "oklch(var(--secondary))",
-                          color:
-                            selectedMonth === m
-                              ? "oklch(var(--primary-foreground))"
-                              : "oklch(var(--foreground))",
-                          borderColor:
-                            selectedMonth === m
-                              ? "oklch(var(--primary))"
-                              : "oklch(var(--border))",
-                        }}
+                        className={
+                          selectedMonth === m ? activePill : inactivePill
+                        }
                       >
                         {format(
                           new Date(
@@ -626,21 +555,11 @@ export function Reports() {
               <button
                 type="button"
                 onClick={() => setSelectedCategory(null)}
-                className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
-                style={{
-                  backgroundColor:
-                    selectedCategory === null
-                      ? "oklch(var(--foreground))"
-                      : "oklch(var(--secondary))",
-                  color:
-                    selectedCategory === null
-                      ? "oklch(var(--background))"
-                      : "oklch(var(--foreground))",
-                  borderColor:
-                    selectedCategory === null
-                      ? "oklch(var(--foreground))"
-                      : "oklch(var(--border))",
-                }}
+                className={
+                  selectedCategory === null
+                    ? "flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-bold transition-all bg-foreground text-background"
+                    : inactivePill
+                }
               >
                 All
               </button>
@@ -652,20 +571,18 @@ export function Reports() {
                     selectedCategory === "__income__" ? null : "__income__",
                   )
                 }
-                className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
+                className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
                 style={{
                   backgroundColor:
                     selectedCategory === "__income__"
-                      ? "#20D18A"
-                      : "oklch(var(--secondary))",
+                      ? "oklch(var(--accent) / 0.15)"
+                      : "var(--glass-bg)",
                   color:
                     selectedCategory === "__income__"
-                      ? "#000"
-                      : "oklch(var(--foreground))",
-                  borderColor:
-                    selectedCategory === "__income__"
-                      ? "#20D18A"
-                      : "oklch(var(--border))",
+                      ? "oklch(var(--accent))"
+                      : "oklch(var(--muted-foreground))",
+                  border: `1px solid ${selectedCategory === "__income__" ? "oklch(var(--accent) / 0.4)" : "transparent"}`,
+                  backdropFilter: "blur(8px)",
                 }}
               >
                 Income
@@ -679,20 +596,18 @@ export function Reports() {
                       selectedCategory === cat.name ? null : cat.name,
                     )
                   }
-                  className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border transition-all"
+                  className="flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold transition-all"
                   style={{
                     backgroundColor:
                       selectedCategory === cat.name
-                        ? cat.color
-                        : "oklch(var(--secondary))",
+                        ? `${cat.color}22`
+                        : "var(--glass-bg)",
                     color:
                       selectedCategory === cat.name
-                        ? "#fff"
-                        : "oklch(var(--foreground))",
-                    borderColor:
-                      selectedCategory === cat.name
                         ? cat.color
-                        : "oklch(var(--border))",
+                        : "oklch(var(--muted-foreground))",
+                    border: `1px solid ${selectedCategory === cat.name ? `${cat.color}66` : "transparent"}`,
+                    backdropFilter: "blur(8px)",
                   }}
                 >
                   {cat.name}
@@ -708,40 +623,34 @@ export function Reports() {
             ) : selectedCategory === null ? (
               /* All-categories overview */
               <div className="grid grid-cols-2 gap-2">
-                {/* Income total — full width, tappable */}
+                {/* Income total */}
                 <button
                   type="button"
                   onClick={() => setSelectedCategory("__income__")}
-                  className="rounded-xl p-3 col-span-2 text-left transition-all active:scale-95"
+                  className="rounded-2xl p-3 col-span-2 text-left transition-all active:scale-95 card-hover"
                   style={{
-                    backgroundColor: "#20D18A18",
-                    border: "1px solid #20D18A44",
+                    backgroundColor: "oklch(var(--accent) / 0.1)",
+                    border: "1px solid oklch(var(--accent) / 0.3)",
                   }}
                   data-ocid="reports.ytd_income.card"
                 >
-                  <p className="text-[10px] text-muted-foreground mb-0.5">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-accent mb-0.5">
                     Total Income
                   </p>
-                  <p
-                    className="text-base font-bold"
-                    style={{ color: "#20D18A" }}
-                  >
+                  <p className="text-xl font-bold font-display text-accent">
                     {formatAmount(ytdData.incomeTotal, currency)}
                   </p>
-                  <p
-                    className="text-[10px] mt-0.5"
-                    style={{ color: "#20D18A" }}
-                  >
+                  <p className="text-[10px] mt-0.5 text-accent opacity-80">
                     Tap to see breakdown →
                   </p>
                 </button>
-                {/* Per category — tappable to drill down */}
+                {/* Per category */}
                 {ytdData.categoryTotals.map(({ cat, total, pctOfIncome }) => (
                   <button
                     type="button"
                     key={cat.id}
                     onClick={() => setSelectedCategory(cat.name)}
-                    className="rounded-xl p-3 text-left transition-all active:scale-95"
+                    className="rounded-2xl p-3 text-left transition-all active:scale-95 card-hover"
                     style={{
                       backgroundColor: `${cat.color}18`,
                       border: `1px solid ${cat.color}44`,
@@ -749,19 +658,19 @@ export function Reports() {
                     data-ocid="reports.ytd_cat.card"
                   >
                     <p
-                      className="text-[10px] font-semibold mb-0.5 truncate"
+                      className="text-[10px] font-bold uppercase tracking-wider mb-0.5 truncate"
                       style={{ color: cat.color }}
                     >
                       {cat.name}
                     </p>
-                    <p className="text-sm font-bold text-foreground">
+                    <p className="text-sm font-bold font-display text-foreground">
                       {formatAmount(total, currency)}
                     </p>
                     <p className="text-[10px] text-muted-foreground">
                       {pctOfIncome.toFixed(1)}% of income
                     </p>
                     <p
-                      className="text-[10px] mt-0.5"
+                      className="text-[10px] mt-0.5 opacity-80"
                       style={{ color: cat.color }}
                     >
                       Tap to drill down →
@@ -774,10 +683,7 @@ export function Reports() {
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p
-                      className="text-sm font-bold"
-                      style={{ color: "#20D18A" }}
-                    >
+                    <p className="text-sm font-bold font-display text-accent">
                       Income Breakdown
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -787,7 +693,7 @@ export function Reports() {
                   <button
                     type="button"
                     onClick={() => setSelectedCategory(null)}
-                    className="text-xs text-muted-foreground underline"
+                    className="text-xs text-primary underline font-medium"
                   >
                     ← Back
                   </button>
@@ -818,31 +724,22 @@ export function Reports() {
                         return (
                           <div
                             key={source}
-                            className="rounded-xl p-3 border border-border"
-                            style={{
-                              backgroundColor: "oklch(var(--background))",
-                            }}
+                            className="glass-card-sm card-hover p-3"
                           >
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs font-semibold text-foreground">
                                 {source}
                               </span>
-                              <span
-                                className="text-xs font-bold"
-                                style={{ color: "#20D18A" }}
-                              >
+                              <span className="text-xs font-bold font-display text-accent">
                                 {formatAmount(total, currency)}
                               </span>
                             </div>
-                            <div
-                              className="h-1.5 rounded-full mb-1"
-                              style={{ backgroundColor: "oklch(var(--muted))" }}
-                            >
+                            <div className="h-1.5 rounded-full mb-1 bg-muted">
                               <div
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{
                                   width: `${barPct}%`,
-                                  backgroundColor: "#20D18A",
+                                  backgroundColor: "oklch(var(--accent))",
                                 }}
                               />
                             </div>
@@ -856,12 +753,12 @@ export function Reports() {
                 )}
               </div>
             ) : activeCatData ? (
-              /* Subcategory drill-down for selected category */
+              /* Subcategory drill-down */
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <p
-                      className="text-sm font-bold"
+                      className="text-sm font-bold font-display"
                       style={{ color: activeCatData.cat.color }}
                     >
                       {activeCatData.cat.name}
@@ -872,6 +769,13 @@ export function Reports() {
                         ` · ${activeCatData.pctOfIncome.toFixed(1)}% of income`}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategory(null)}
+                    className="text-xs text-primary underline font-medium"
+                  >
+                    ← Back
+                  </button>
                 </div>
                 <div className="space-y-2">
                   {activeCatData.subTotals.length === 0 ? (
@@ -890,26 +794,20 @@ export function Reports() {
                         return (
                           <div
                             key={sub.id}
-                            className="rounded-xl p-3 border border-border"
-                            style={{
-                              backgroundColor: "oklch(var(--background))",
-                            }}
+                            className="glass-card-sm card-hover p-3"
                           >
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs font-semibold text-foreground">
                                 {sub.name}
                               </span>
                               <span
-                                className="text-xs font-bold"
+                                className="text-xs font-bold font-display"
                                 style={{ color: subColor }}
                               >
                                 {formatAmount(subTotal, currency)}
                               </span>
                             </div>
-                            <div
-                              className="h-1.5 rounded-full mb-1"
-                              style={{ backgroundColor: "oklch(var(--muted))" }}
-                            >
+                            <div className="h-1.5 rounded-full mb-1 bg-muted">
                               <div
                                 className="h-full rounded-full transition-all duration-500"
                                 style={{
@@ -935,19 +833,15 @@ export function Reports() {
 
           {/* Insights */}
           {insights.length > 0 && (
-            <div className="mb-5">
-              <h2 className="text-sm font-semibold text-muted-foreground mb-2">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 px-1">
                 {t("insights")}
               </h2>
               <div className="space-y-2">
                 {insights.map((insight) => (
                   <div
                     key={insight}
-                    className="p-3 rounded-xl text-sm font-medium border border-border"
-                    style={{
-                      backgroundColor: "oklch(var(--card))",
-                      color: "oklch(var(--foreground))",
-                    }}
+                    className="glass-card-sm card-hover p-3 text-sm font-medium text-foreground"
                   >
                     💡 {insight}
                   </div>
@@ -957,11 +851,8 @@ export function Reports() {
           )}
 
           {/* Period Comparison */}
-          <div
-            className="rounded-2xl border border-border p-4 mb-4"
-            style={{ backgroundColor: "oklch(var(--card))" }}
-          >
-            <h2 className="text-sm font-semibold text-muted-foreground mb-3">
+          <div className="glass-card p-4">
+            <h2 className="text-sm font-bold font-display text-foreground mb-3">
               {t("periodComparison")}
             </h2>
             <div className="h-48">
@@ -997,12 +888,12 @@ export function Reports() {
                   <Legend wrapperStyle={{ fontSize: 11 }} />
                   <Bar
                     dataKey={t("thisPeriod")}
-                    fill={customCategories[0]?.color ?? "#20D18A"}
+                    fill={customCategories[0]?.color ?? "oklch(var(--chart-1))"}
                     radius={[4, 4, 0, 0]}
                   />
                   <Bar
                     dataKey={t("lastPeriod")}
-                    fill={customCategories[1]?.color ?? "#19B7C6"}
+                    fill={customCategories[1]?.color ?? "oklch(var(--chart-2))"}
                     radius={[4, 4, 0, 0]}
                   />
                 </BarChart>
@@ -1011,11 +902,8 @@ export function Reports() {
           </div>
 
           {/* Spending Trends */}
-          <div
-            className="rounded-2xl border border-border p-4 mb-4"
-            style={{ backgroundColor: "oklch(var(--card))" }}
-          >
-            <h2 className="text-sm font-semibold text-muted-foreground mb-3">
+          <div className="glass-card p-4">
+            <h2 className="text-sm font-bold font-display text-foreground mb-3">
               {t("spendingTrends")}
             </h2>
             {trendData.length < 2 ? (

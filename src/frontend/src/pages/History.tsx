@@ -8,9 +8,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { format, parseISO } from "date-fns";
-import { Download, Pencil, Trash2 } from "lucide-react";
+import { Copy, Download, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import type { Tab } from "../components/BottomNav";
@@ -25,9 +31,17 @@ import { Reports } from "./Reports";
 interface HistoryProps {
   onNavigate?: (tab: Tab) => void;
   privacyMode?: boolean;
+  onOpenAddTransaction?: (prefill: {
+    amount?: string;
+    date?: string;
+    description?: string;
+    type?: "expense" | "income" | "saveToGoal";
+    subCategory?: string;
+    account?: string;
+  }) => void;
 }
 
-type PeriodFilter = "all" | "current" | string; // string = period id
+type PeriodFilter = "all" | "current" | string;
 
 interface EditState {
   id: string;
@@ -40,9 +54,15 @@ interface EditState {
   account: string;
 }
 
+interface CopyState {
+  tx: Transaction;
+  dateChoice: "today" | "original";
+}
+
 export function History({
   onNavigate: _onNavigate,
   privacyMode = false,
+  onOpenAddTransaction,
 }: HistoryProps) {
   const t = useTranslation();
   const {
@@ -65,26 +85,22 @@ export function History({
   const pAmt = (val: number) =>
     privacyMode ? "••••••" : formatAmount(val, currency);
 
-  // Period filter
   const [periodFilter, setPeriodFilter] = useState<PeriodFilter>("current");
-  // Category filters
   const [filterMain, setFilterMain] = useState<string>("All");
   const [filterSub, setFilterSub] = useState<string>("All");
+  const [filterAccount, setFilterAccount] = useState<string>("all");
   const [search, setSearch] = useState("");
-  // Dialog states
   const [editTx, setEditTx] = useState<EditState | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  // Split expense total-change prompt state
+  const [copyTx, setCopyTx] = useState<CopyState | null>(null);
   const [splitTotalBillChanged, setSplitTotalBillChanged] = useState<
     boolean | null
   >(null);
   const [splitNewTotal, setSplitNewTotal] = useState("");
 
-  // Resolve which transactions to show based on period filter
   const filteredByPeriod = (() => {
     if (periodFilter === "current") return currentTransactions;
     if (periodFilter === "all") {
-      // All transactions: combine current + archived periods (deduplicated by id)
       const seen = new Set<string>();
       const all: Transaction[] = [];
       for (const tx of transactions) {
@@ -103,25 +119,22 @@ export function History({
       }
       return all.sort((a, b) => b.date.localeCompare(a.date));
     }
-    // Specific archived period
     const period = periods.find((p) => p.id === periodFilter);
     return period
       ? [...period.transactions].sort((a, b) => b.date.localeCompare(a.date))
       : [];
   })();
 
-  // Apply category + search filters
   const filtered = filteredByPeriod.filter((tx) => {
     if (filterMain === "__income__") {
-      // Show only income transactions (exclude transfers)
       if (tx.type !== "income" || tx.mainCategory === "Transfer") return false;
     } else if (filterMain === "Transfer") {
-      // Show only transfer transactions
       if (tx.mainCategory !== "Transfer") return false;
     } else if (filterMain !== "All") {
       if (tx.mainCategory !== filterMain) return false;
     }
     if (filterSub !== "All" && tx.subCategory !== filterSub) return false;
+    if (filterAccount !== "all" && tx.account !== filterAccount) return false;
     if (
       search &&
       !tx.description.toLowerCase().includes(search.toLowerCase()) &&
@@ -169,22 +182,18 @@ export function History({
       ? (getMainCatForSub(editTx.subCategory) ?? editTx.mainCategory)
       : editTx.mainCategory;
 
-    // Reverse the old transaction's balance effect
     const origTx = transactions.find((tx) => tx.id === editTx.id);
     if (origTx?.account) {
       const origAcc = accounts.find((a) => a.name === origTx.account);
       if (origAcc) {
         if (origTx.type === "expense") {
-          // Expense was debited — credit back the original amount
           creditAccount(origAcc.id, Number(origTx.amount));
         } else if (origTx.type === "income") {
-          // Income was credited — debit back the original amount
           debitAccount(origAcc.id, Number(origTx.amount));
         }
       }
     }
 
-    // Apply the new transaction's balance effect
     if (editTx.account) {
       const newAcc = accounts.find((a) => a.name === editTx.account);
       if (newAcc) {
@@ -206,14 +215,12 @@ export function History({
       account: editTx.account || undefined,
     });
 
-    // If this was a split expense, update the linked IOU amount
     const origTxForIOU = transactions.find((tx) => tx.id === editTx.id);
     if (origTxForIOU?.linkedIOUId) {
       const linkedIOU = ious.find((iou) => iou.id === origTxForIOU.linkedIOUId);
       if (linkedIOU) {
         const amountChanged = num !== Number(origTxForIOU.amount);
         if (amountChanged) {
-          // Require user confirmation before changing the IOU
           if (splitTotalBillChanged === null) {
             toast.error("Please confirm whether the total bill changed");
             return;
@@ -229,7 +236,6 @@ export function History({
             }
             newIouAmount = newTotal - num;
           } else {
-            // Same total — IOU absorbs the difference
             newIouAmount = originalTotal - num;
           }
           if (newIouAmount <= 0) {
@@ -249,13 +255,11 @@ export function History({
 
   const handleDelete = () => {
     if (!deleteId) return;
-    // deleteTransaction already handles balance reversal internally
     deleteTransaction(deleteId);
     setDeleteId(null);
     toast.success("Transaction deleted");
   };
 
-  // Period label helpers
   const periodLabel = (id: string) => {
     const p = periods.find((x) => x.id === id);
     if (!p) return id;
@@ -266,28 +270,40 @@ export function History({
     }
   };
 
-  // Account options for edit dialog
   const accountOptions = [
     { id: "", name: "None" },
-    ...accounts.map((a) => ({ id: a.name, name: a.name })),
+    ...accounts.flatMap((a) => [
+      { id: a.name, name: a.name },
+      ...(a.subAccounts ?? []).map((sub) => ({
+        id: `${a.id}>${sub.id}`,
+        name: `${a.name} › ${sub.name}`,
+      })),
+    ]),
   ];
 
+  // Pill chip helper classes
+  const activePill =
+    "flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all bg-primary/15 text-primary border border-primary/40";
+  const inactivePill =
+    "flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all glass-card-sm text-muted-foreground border-0 hover:text-foreground";
+
   return (
-    <div className="pb-24 fade-in">
+    <div className="pb-24 animate-spring-in">
       <Tabs defaultValue="transactions" className="w-full">
+        {/* Tab header */}
         <div className="px-4 pt-2">
           <div className="flex items-center gap-2 mb-4">
-            <TabsList className="flex-1">
+            <TabsList className="flex-1 glass-card-sm border-0">
               <TabsTrigger
                 value="transactions"
-                className="flex-1"
+                className="flex-1 font-display text-xs font-semibold"
                 data-ocid="history.transactions.tab"
               >
                 Transactions
               </TabsTrigger>
               <TabsTrigger
                 value="reports"
-                className="flex-1"
+                className="flex-1 font-display text-xs font-semibold"
                 data-ocid="history.reports.tab"
               >
                 Reports
@@ -298,23 +314,13 @@ export function History({
         </div>
 
         <TabsContent value="transactions" className="mt-0">
-          <div className="px-4">
+          <div className="px-4 space-y-2.5">
             {/* Period filter chips */}
-            <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
               <button
                 type="button"
                 onClick={() => setPeriodFilter("all")}
-                className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all"
-                style={{
-                  backgroundColor:
-                    periodFilter === "all"
-                      ? "oklch(var(--primary))"
-                      : "oklch(var(--secondary))",
-                  color:
-                    periodFilter === "all"
-                      ? "oklch(var(--primary-foreground))"
-                      : "oklch(var(--muted-foreground))",
-                }}
+                className={periodFilter === "all" ? activePill : inactivePill}
                 data-ocid="history.period_all.toggle"
               >
                 All Time
@@ -322,17 +328,9 @@ export function History({
               <button
                 type="button"
                 onClick={() => setPeriodFilter("current")}
-                className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all"
-                style={{
-                  backgroundColor:
-                    periodFilter === "current"
-                      ? "oklch(var(--primary))"
-                      : "oklch(var(--secondary))",
-                  color:
-                    periodFilter === "current"
-                      ? "oklch(var(--primary-foreground))"
-                      : "oklch(var(--muted-foreground))",
-                }}
+                className={
+                  periodFilter === "current" ? activePill : inactivePill
+                }
                 data-ocid="history.period_current.toggle"
               >
                 Current
@@ -342,17 +340,7 @@ export function History({
                   type="button"
                   key={p.id}
                   onClick={() => setPeriodFilter(p.id)}
-                  className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all whitespace-nowrap"
-                  style={{
-                    backgroundColor:
-                      periodFilter === p.id
-                        ? "oklch(var(--primary))"
-                        : "oklch(var(--secondary))",
-                    color:
-                      periodFilter === p.id
-                        ? "oklch(var(--primary-foreground))"
-                        : "oklch(var(--muted-foreground))",
-                  }}
+                  className={`${periodFilter === p.id ? activePill : inactivePill} whitespace-nowrap`}
                   data-ocid="history.period.toggle"
                 >
                   {periodLabel(p.id)}
@@ -361,46 +349,39 @@ export function History({
             </div>
 
             {/* Search bar + CSV export */}
-            <div className="flex items-center gap-2 mb-3">
-              <input
-                type="text"
-                placeholder={t("searchPlaceholder")}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-xl text-sm border border-border bg-card text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary"
-                data-ocid="history.search.input"
-              />
-              <Button
-                variant="outline"
-                size="sm"
+            <div className="flex items-center gap-2">
+              <div className="floating-label-group flex-1">
+                <input
+                  type="text"
+                  placeholder=" "
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pr-3"
+                  id="history-search"
+                  data-ocid="history.search.input"
+                />
+                <label htmlFor="history-search">{t("searchPlaceholder")}</label>
+              </div>
+              <button
+                type="button"
                 onClick={exportCSV}
-                className="gap-1 flex-shrink-0"
+                className="flex items-center gap-1.5 px-3 py-2 glass-card-sm border text-xs font-semibold text-muted-foreground hover:text-primary hover:bg-primary/10 hover:border-primary/30 transition-all flex-shrink-0"
                 data-ocid="history.export.button"
               >
-                <Download size={14} />
+                <Download size={13} />
                 CSV
-              </Button>
+              </button>
             </div>
 
             {/* Category filter chips */}
-            <div className="flex gap-2 mb-2 overflow-x-auto pb-1 scrollbar-none">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
               <button
                 type="button"
                 onClick={() => {
                   setFilterMain("All");
                   setFilterSub("All");
                 }}
-                className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all"
-                style={{
-                  backgroundColor:
-                    filterMain === "All"
-                      ? "oklch(var(--primary))"
-                      : "oklch(var(--secondary))",
-                  color:
-                    filterMain === "All"
-                      ? "oklch(var(--primary-foreground))"
-                      : "oklch(var(--muted-foreground))",
-                }}
+                className={filterMain === "All" ? activePill : inactivePill}
                 data-ocid="history.filter_all.toggle"
               >
                 {t("filterAll")}
@@ -413,91 +394,76 @@ export function History({
                     setFilterMain(cat.name);
                     setFilterSub("All");
                   }}
-                  className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all"
+                  className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all border"
                   style={{
                     backgroundColor:
+                      filterMain === cat.name ? `${cat.color}22` : undefined,
+                    borderColor:
                       filterMain === cat.name
-                        ? cat.color
-                        : "oklch(var(--secondary))",
-                    color:
+                        ? `${cat.color}66`
+                        : "transparent",
+                    color: filterMain === cat.name ? cat.color : undefined,
+                    backdropFilter: "blur(8px)",
+                    background:
                       filterMain === cat.name
-                        ? "#fff"
-                        : "oklch(var(--muted-foreground))",
+                        ? `${cat.color}22`
+                        : "var(--glass-bg)",
                   }}
                   data-ocid="history.filter_category.toggle"
                 >
                   {cat.name}
                 </button>
               ))}
-              {/* Special chips: Income and Transfer */}
+              {/* Income chip */}
               <button
                 type="button"
                 onClick={() => {
                   setFilterMain("__income__");
                   setFilterSub("All");
                 }}
-                className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all border"
+                className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all border"
                 style={{
                   backgroundColor:
                     filterMain === "__income__"
-                      ? "#20D18A"
-                      : "oklch(var(--secondary))",
-                  color:
-                    filterMain === "__income__"
-                      ? "#000"
-                      : "oklch(var(--muted-foreground))",
+                      ? "oklch(0.6 0.22 195 / 0.15)"
+                      : "var(--glass-bg)",
                   borderColor:
                     filterMain === "__income__"
-                      ? "#20D18A"
-                      : "oklch(var(--border))",
+                      ? "oklch(0.6 0.22 195 / 0.5)"
+                      : "transparent",
+                  color:
+                    filterMain === "__income__"
+                      ? "oklch(var(--accent))"
+                      : undefined,
+                  backdropFilter: "blur(8px)",
                 }}
                 data-ocid="history.filter_income.toggle"
               >
                 Income
               </button>
+              {/* Transfer chip */}
               <button
                 type="button"
                 onClick={() => {
                   setFilterMain("Transfer");
                   setFilterSub("All");
                 }}
-                className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all border"
-                style={{
-                  backgroundColor:
-                    filterMain === "Transfer"
-                      ? "#6366F1"
-                      : "oklch(var(--secondary))",
-                  color:
-                    filterMain === "Transfer"
-                      ? "#fff"
-                      : "oklch(var(--muted-foreground))",
-                  borderColor:
-                    filterMain === "Transfer"
-                      ? "#6366F1"
-                      : "oklch(var(--border))",
-                }}
+                className={
+                  filterMain === "Transfer" ? activePill : inactivePill
+                }
                 data-ocid="history.filter_transfer.toggle"
               >
                 Transfer
               </button>
             </div>
 
+            {/* Subcategory chips */}
             {subCatsForFilter.length > 0 && (
-              <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-none">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <button
                   type="button"
                   onClick={() => setFilterSub("All")}
-                  className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all"
-                  style={{
-                    backgroundColor:
-                      filterSub === "All"
-                        ? "oklch(var(--primary))"
-                        : "oklch(var(--secondary))",
-                    color:
-                      filterSub === "All"
-                        ? "oklch(var(--primary-foreground))"
-                        : "oklch(var(--muted-foreground))",
-                  }}
+                  className={filterSub === "All" ? activePill : inactivePill}
                 >
                   All
                 </button>
@@ -506,17 +472,9 @@ export function History({
                     type="button"
                     key={sub.id}
                     onClick={() => setFilterSub(sub.name)}
-                    className="flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all"
-                    style={{
-                      backgroundColor:
-                        filterSub === sub.name
-                          ? "oklch(var(--primary))"
-                          : "oklch(var(--secondary))",
-                      color:
-                        filterSub === sub.name
-                          ? "oklch(var(--primary-foreground))"
-                          : "oklch(var(--muted-foreground))",
-                    }}
+                    className={
+                      filterSub === sub.name ? activePill : inactivePill
+                    }
                   >
                     {sub.name}
                   </button>
@@ -524,8 +482,52 @@ export function History({
               </div>
             )}
 
+            {/* Account filter chips */}
+            {accounts.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                <button
+                  type="button"
+                  onClick={() => setFilterAccount("all")}
+                  className={
+                    filterAccount === "all" ? activePill : inactivePill
+                  }
+                  data-ocid="history.filter_account_all.toggle"
+                >
+                  All Accounts
+                </button>
+                {accounts.flatMap((acc) => {
+                  const chips = [
+                    <button
+                      type="button"
+                      key={acc.id}
+                      onClick={() => setFilterAccount(acc.name)}
+                      className={`${filterAccount === acc.name ? activePill : inactivePill} whitespace-nowrap`}
+                      data-ocid="history.filter_account.toggle"
+                    >
+                      {acc.name}
+                    </button>,
+                    ...(acc.subAccounts ?? []).map((sub) => {
+                      const subKey = `${acc.id}>${sub.id}`;
+                      return (
+                        <button
+                          type="button"
+                          key={subKey}
+                          onClick={() => setFilterAccount(subKey)}
+                          className={`${filterAccount === subKey ? activePill : inactivePill} whitespace-nowrap`}
+                          data-ocid="history.filter_subaccount.toggle"
+                        >
+                          {acc.name} › {sub.name}
+                        </button>
+                      );
+                    }),
+                  ];
+                  return chips;
+                })}
+              </div>
+            )}
+
             {/* Summary line */}
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="text-xs text-muted-foreground">
               {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
               {periodFilter === "all"
                 ? " (all time)"
@@ -536,10 +538,10 @@ export function History({
           </div>
 
           {/* Transaction list */}
-          <div className="px-4 space-y-2">
+          <div className="px-4 mt-2 space-y-2">
             {filtered.length === 0 ? (
               <div
-                className="text-center py-16"
+                className="glass-card p-10 text-center animate-spring-in mt-4"
                 data-ocid="history.transactions.empty_state"
               >
                 <div className="text-4xl mb-3">🧧</div>
@@ -550,11 +552,12 @@ export function History({
             ) : (
               filtered.map((tx, idx) => {
                 const { icon, color } = getSubInfo(tx);
+                const isIncome = tx.type === "income";
                 return (
                   <div
                     key={tx.id}
-                    className="flex items-center gap-2 p-3 rounded-xl border border-border"
-                    style={{ backgroundColor: "oklch(var(--card))" }}
+                    className="glass-card-sm card-hover flex items-center gap-3 p-3 animate-spring-up"
+                    style={{ animationDelay: `${Math.min(idx * 40, 400)}ms` }}
                     data-ocid={`history.transaction.item.${idx + 1}`}
                   >
                     <CategoryIcon
@@ -565,7 +568,7 @@ export function History({
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start">
                         <div className="min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">
+                          <p className="text-sm font-semibold text-foreground truncate">
                             {tx.description || tx.subCategory}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -578,34 +581,31 @@ export function History({
                             )}
                           </p>
                         </div>
-                        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                        <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
                           <span
-                            className="text-sm font-bold"
+                            className="text-sm font-bold font-display"
                             style={{
-                              color:
-                                tx.type === "income"
-                                  ? "oklch(var(--primary))"
-                                  : "#EB5757",
+                              color: isIncome
+                                ? "oklch(var(--accent))"
+                                : "oklch(var(--destructive))",
                             }}
                           >
-                            {tx.type === "income" ? "+" : "-"}
+                            {isIncome ? "+" : "-"}
                             {pAmt(tx.amount)}
                           </span>
                           {/* Type badge */}
                           <span
-                            className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                            className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold"
                             style={{
-                              backgroundColor:
-                                tx.type === "income"
-                                  ? "oklch(var(--primary) / 0.15)"
-                                  : "#EB575720",
-                              color:
-                                tx.type === "income"
-                                  ? "oklch(var(--primary))"
-                                  : "#EB5757",
+                              backgroundColor: isIncome
+                                ? "oklch(var(--accent) / 0.15)"
+                                : "oklch(var(--destructive) / 0.15)",
+                              color: isIncome
+                                ? "oklch(var(--accent))"
+                                : "oklch(var(--destructive))",
                             }}
                           >
-                            {tx.type === "income" ? "In" : "Out"}
+                            {isIncome ? "In" : "Out"}
                           </span>
                         </div>
                       </div>
@@ -614,9 +614,17 @@ export function History({
                     <div className="flex flex-col gap-1 flex-shrink-0">
                       <button
                         type="button"
+                        onClick={() => setCopyTx({ tx, dateChoice: "today" })}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all"
+                        aria-label="Copy transaction"
+                        data-ocid={`history.transaction.copy_button.${idx + 1}`}
+                      >
+                        <Copy size={12} />
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => openEdit(tx)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
-                        style={{ backgroundColor: "oklch(var(--secondary))" }}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
                         aria-label="Edit transaction"
                         data-ocid={`history.transaction.edit_button.${idx + 1}`}
                       >
@@ -625,11 +633,7 @@ export function History({
                       <button
                         type="button"
                         onClick={() => setDeleteId(tx.id)}
-                        className="p-1.5 rounded-lg"
-                        style={{
-                          backgroundColor: "#EB575722",
-                          color: "#EB5757",
-                        }}
+                        className="p-1.5 rounded-lg text-destructive hover:bg-destructive/15 transition-all"
                         aria-label="Delete transaction"
                         data-ocid={`history.transaction.delete_button.${idx + 1}`}
                       >
@@ -649,6 +653,8 @@ export function History({
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Dialog */}
       <Dialog
         open={!!editTx}
         onOpenChange={(o) => {
@@ -660,18 +666,20 @@ export function History({
         }}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="glass-card max-h-[90vh] overflow-y-auto border-0"
           data-ocid="history.edit.dialog"
         >
           <DialogHeader>
-            <DialogTitle>Edit Transaction</DialogTitle>
+            <DialogTitle className="font-display">Edit Transaction</DialogTitle>
           </DialogHeader>
           {editTx && (
             <div className="space-y-4">
               {/* Type toggle */}
               <div>
-                <Label>Type</Label>
-                <div className="flex gap-2 mt-1">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+                  Type
+                </Label>
+                <div className="flex gap-2 mt-2">
                   {(["expense", "income"] as TransactionType[]).map((tp) => (
                     <button
                       type="button"
@@ -681,18 +689,27 @@ export function History({
                           prev ? { ...prev, type: tp } : prev,
                         )
                       }
-                      className="flex-1 py-1.5 rounded-lg text-sm font-medium transition-all"
+                      className="flex-1 py-2 rounded-xl text-sm font-semibold transition-all"
                       style={{
                         backgroundColor:
                           editTx.type === tp
                             ? tp === "expense"
-                              ? "#EB5757"
-                              : "oklch(var(--primary))"
-                            : "oklch(var(--secondary))",
+                              ? "oklch(var(--destructive) / 0.15)"
+                              : "oklch(var(--primary) / 0.15)"
+                            : "var(--glass-bg)",
                         color:
                           editTx.type === tp
-                            ? "#fff"
+                            ? tp === "expense"
+                              ? "oklch(var(--destructive))"
+                              : "oklch(var(--primary))"
                             : "oklch(var(--muted-foreground))",
+                        border: `1.5px solid ${
+                          editTx.type === tp
+                            ? tp === "expense"
+                              ? "oklch(var(--destructive) / 0.4)"
+                              : "oklch(var(--primary) / 0.4)"
+                            : "var(--glass-border)"
+                        }`,
                       }}
                       data-ocid={`history.edit.type_${tp}.toggle`}
                     >
@@ -704,7 +721,12 @@ export function History({
 
               {/* Amount */}
               <div>
-                <Label htmlFor="edit-amount">Amount</Label>
+                <Label
+                  htmlFor="edit-amount"
+                  className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
+                >
+                  Amount
+                </Label>
                 <Input
                   id="edit-amount"
                   type="number"
@@ -723,7 +745,12 @@ export function History({
 
               {/* Date */}
               <div>
-                <Label htmlFor="edit-date">Date</Label>
+                <Label
+                  htmlFor="edit-date"
+                  className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
+                >
+                  Date
+                </Label>
                 <Input
                   id="edit-date"
                   type="date"
@@ -740,8 +767,10 @@ export function History({
 
               {/* Category picker */}
               <div>
-                <Label>Category</Label>
-                <div className="mt-1 grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+                  Category
+                </Label>
+                <div className="mt-2 grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
                   {customCategories.map((cat) => (
                     <div key={cat.id}>
                       <div className="text-[9px] font-bold uppercase text-muted-foreground mb-0.5 px-1">
@@ -764,17 +793,15 @@ export function History({
                                   : prev,
                               )
                             }
-                            className="w-full flex items-center gap-1.5 p-1.5 rounded-lg mb-0.5 text-left transition-all"
+                            className="w-full flex items-center gap-1.5 p-1.5 rounded-lg mb-0.5 text-left transition-all glass-card-sm"
                             style={{
                               backgroundColor:
                                 editTx.subCategory === sub.name
                                   ? `${effectiveColor}22`
-                                  : "oklch(var(--secondary))",
-                              borderWidth: 1,
-                              borderStyle: "solid",
+                                  : undefined,
                               borderColor:
                                 editTx.subCategory === sub.name
-                                  ? effectiveColor
+                                  ? `${effectiveColor}66`
                                   : "transparent",
                             }}
                           >
@@ -796,7 +823,12 @@ export function History({
 
               {/* Description */}
               <div>
-                <Label htmlFor="edit-desc">Description</Label>
+                <Label
+                  htmlFor="edit-desc"
+                  className="text-xs uppercase tracking-wide text-muted-foreground font-semibold"
+                >
+                  Description
+                </Label>
                 <Input
                   id="edit-desc"
                   value={editTx.description}
@@ -810,11 +842,11 @@ export function History({
                 />
               </div>
 
-              {/* Account (optional) */}
+              {/* Account */}
               <div>
-                <Label>
+                <Label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
                   Account{" "}
-                  <span className="text-muted-foreground text-xs font-normal">
+                  <span className="text-muted-foreground text-xs font-normal normal-case tracking-normal">
                     (optional)
                   </span>
                 </Label>
@@ -833,20 +865,22 @@ export function History({
                             : prev,
                         )
                       }
-                      className="px-3 py-1 rounded-full text-xs font-medium border transition-all"
+                      className="px-3 py-1 rounded-full text-xs font-medium transition-all"
                       style={{
                         backgroundColor:
                           editTx.account === acc.id
                             ? "oklch(var(--primary) / 0.15)"
-                            : "transparent",
-                        borderColor:
+                            : "var(--glass-bg)",
+                        border: `1px solid ${
                           editTx.account === acc.id
-                            ? "oklch(var(--primary))"
-                            : "oklch(var(--border))",
+                            ? "oklch(var(--primary) / 0.4)"
+                            : "var(--glass-border)"
+                        }`,
                         color:
                           editTx.account === acc.id
                             ? "oklch(var(--primary))"
                             : "oklch(var(--foreground))",
+                        backdropFilter: "blur(8px)",
                       }}
                       data-ocid="history.edit.account.toggle"
                     >
@@ -868,11 +902,8 @@ export function History({
                 const originalTotal =
                   linkedIOU.amountLent + Number(origTx.amount);
                 return (
-                  <div
-                    className="rounded-xl p-3 space-y-2"
-                    style={{ backgroundColor: "oklch(var(--secondary))" }}
-                  >
-                    <p className="text-sm font-medium text-foreground">
+                  <div className="glass-card-sm p-3 space-y-2">
+                    <p className="text-sm font-semibold text-foreground font-display">
                       Did the total bill amount change?
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -883,17 +914,17 @@ export function History({
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        className="flex-1 text-xs py-2 rounded-xl font-semibold transition-all"
                         style={{
                           backgroundColor:
                             splitTotalBillChanged === true
-                              ? "oklch(var(--primary))"
-                              : "oklch(var(--secondary) / 0.8)",
+                              ? "oklch(var(--primary) / 0.15)"
+                              : "var(--glass-bg)",
                           color:
                             splitTotalBillChanged === true
-                              ? "oklch(var(--primary-foreground))"
+                              ? "oklch(var(--primary))"
                               : "oklch(var(--foreground))",
-                          border: "1px solid oklch(var(--border))",
+                          border: `1px solid ${splitTotalBillChanged === true ? "oklch(var(--primary) / 0.4)" : "var(--glass-border)"}`,
                         }}
                         onClick={() => setSplitTotalBillChanged(true)}
                         data-ocid="history.edit.split_total_changed.button"
@@ -902,17 +933,17 @@ export function History({
                       </button>
                       <button
                         type="button"
-                        className="flex-1 text-xs py-2 rounded-xl font-medium"
+                        className="flex-1 text-xs py-2 rounded-xl font-semibold transition-all"
                         style={{
                           backgroundColor:
                             splitTotalBillChanged === false
-                              ? "oklch(var(--primary))"
-                              : "oklch(var(--secondary) / 0.8)",
+                              ? "oklch(var(--primary) / 0.15)"
+                              : "var(--glass-bg)",
                           color:
                             splitTotalBillChanged === false
-                              ? "oklch(var(--primary-foreground))"
+                              ? "oklch(var(--primary))"
                               : "oklch(var(--foreground))",
-                          border: "1px solid oklch(var(--border))",
+                          border: `1px solid ${splitTotalBillChanged === false ? "oklch(var(--primary) / 0.4)" : "var(--glass-border)"}`,
                         }}
                         onClick={() => setSplitTotalBillChanged(false)}
                         data-ocid="history.edit.split_same_total.button"
@@ -922,11 +953,12 @@ export function History({
                     </div>
                     {splitTotalBillChanged === true && (
                       <div>
-                        <Label>New Total Bill Amount</Label>
+                        <Label className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">
+                          New Total Bill Amount
+                        </Label>
                         <input
                           type="number"
-                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-background"
-                          style={{ borderColor: "oklch(var(--border))" }}
+                          className="mt-1 w-full rounded-xl border px-3 py-2 text-sm bg-input border-border focus:outline-none focus:ring-2 focus:ring-primary"
                           placeholder="Enter new total"
                           value={splitNewTotal}
                           onChange={(e) => setSplitNewTotal(e.target.value)}
@@ -970,10 +1002,7 @@ export function History({
             </Button>
             <Button
               onClick={handleSaveEdit}
-              style={{
-                backgroundColor: "oklch(var(--primary))",
-                color: "oklch(var(--primary-foreground))",
-              }}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
               data-ocid="history.edit.save_button"
             >
               Save
@@ -981,10 +1010,17 @@ export function History({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Dialog */}
       <Dialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <DialogContent data-ocid="history.delete.dialog">
+        <DialogContent
+          className="glass-card border-0"
+          data-ocid="history.delete.dialog"
+        >
           <DialogHeader>
-            <DialogTitle>Delete Transaction</DialogTitle>
+            <DialogTitle className="font-display">
+              Delete Transaction
+            </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">{t("confirmDelete")}</p>
           <DialogFooter className="gap-2">
@@ -997,7 +1033,7 @@ export function History({
             </Button>
             <Button
               onClick={handleDelete}
-              style={{ backgroundColor: "#EB5757", color: "#fff" }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-ocid="history.delete.confirm_button"
             >
               {t("delete")}
@@ -1005,6 +1041,107 @@ export function History({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Copy Transaction Sheet */}
+      <Sheet open={!!copyTx} onOpenChange={(o) => !o && setCopyTx(null)}>
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl glass-card border-0"
+          data-ocid="history.copy.sheet"
+        >
+          <SheetHeader className="mb-4">
+            <SheetTitle className="font-display">Copy Transaction</SheetTitle>
+          </SheetHeader>
+          {copyTx && (
+            <>
+              <p className="text-sm text-muted-foreground mb-4">
+                <span className="font-semibold text-foreground">
+                  {copyTx.tx.description || copyTx.tx.subCategory}
+                </span>
+                {" · "}₱
+                {copyTx.tx.amount.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </p>
+              <p className="text-sm font-semibold text-foreground mb-3 font-display">
+                Which date would you like to use?
+              </p>
+              <div className="flex gap-2 mb-6">
+                <button
+                  type="button"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                  style={{
+                    backgroundColor:
+                      copyTx.dateChoice === "today"
+                        ? "oklch(var(--primary) / 0.15)"
+                        : "var(--glass-bg)",
+                    color:
+                      copyTx.dateChoice === "today"
+                        ? "oklch(var(--primary))"
+                        : "oklch(var(--foreground))",
+                    border: `1.5px solid ${copyTx.dateChoice === "today" ? "oklch(var(--primary) / 0.4)" : "var(--glass-border)"}`,
+                  }}
+                  onClick={() =>
+                    setCopyTx((p) => (p ? { ...p, dateChoice: "today" } : null))
+                  }
+                  data-ocid="history.copy.today.button"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                  style={{
+                    backgroundColor:
+                      copyTx.dateChoice === "original"
+                        ? "oklch(var(--primary) / 0.15)"
+                        : "var(--glass-bg)",
+                    color:
+                      copyTx.dateChoice === "original"
+                        ? "oklch(var(--primary))"
+                        : "oklch(var(--foreground))",
+                    border: `1.5px solid ${copyTx.dateChoice === "original" ? "oklch(var(--primary) / 0.4)" : "var(--glass-border)"}`,
+                  }}
+                  onClick={() =>
+                    setCopyTx((p) =>
+                      p ? { ...p, dateChoice: "original" } : null,
+                    )
+                  }
+                  data-ocid="history.copy.original_date.button"
+                >
+                  Original: {format(parseISO(copyTx.tx.date), "MMM d, yyyy")}
+                </button>
+              </div>
+              <Button
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => {
+                  if (!copyTx) return;
+                  const chosenDate =
+                    copyTx.dateChoice === "today"
+                      ? format(new Date(), "yyyy-MM-dd")
+                      : copyTx.tx.date;
+                  const tx = copyTx.tx;
+                  setCopyTx(null);
+                  if (onOpenAddTransaction) {
+                    onOpenAddTransaction({
+                      amount: tx.amount.toString(),
+                      date: chosenDate,
+                      description: tx.description,
+                      type: tx.type as "expense" | "income",
+                      subCategory: tx.subCategory,
+                      account: tx.account,
+                    });
+                  }
+                }}
+                data-ocid="history.copy.confirm.button"
+              >
+                Continue to Add Transaction
+              </Button>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

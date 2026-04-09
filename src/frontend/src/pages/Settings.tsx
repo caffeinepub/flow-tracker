@@ -619,7 +619,7 @@ export function Settings() {
   };
 
   return (
-    <div className="pb-24 px-4 pt-2 animate-spring-in">
+    <div className="pb-nav-safe px-4 pt-2 animate-spring-in">
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-display font-bold text-foreground">
           Settings

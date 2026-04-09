@@ -376,7 +376,7 @@ export function Reports() {
     "flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-all glass-card-sm text-muted-foreground border-0 hover:text-foreground";
 
   return (
-    <div className="pb-24 animate-spring-in">
+    <div className="pb-nav-safe animate-spring-in">
       <Tabs defaultValue="reports" className="w-full">
         {/* Tab header */}
         <div className="sticky top-0 z-20 px-4 pt-2 pb-2 border-b border-border bg-background/80 backdrop-blur-md">

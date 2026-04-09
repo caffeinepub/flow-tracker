@@ -435,7 +435,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
   const customMonthsYears = (customMonths / 12).toFixed(1);
 
   return (
-    <div className="pb-24 px-4 pt-2 animate-spring-in">
+    <div className="pb-nav-safe px-4 pt-2 animate-spring-in">
       {/* Monthly Income Input */}
       <div className="glass-card mb-4" data-ocid="projections.income.card">
         <button
@@ -1333,7 +1333,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
         }}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="projections.edit_goal.dialog"
         >
           <DialogHeader>
@@ -1515,7 +1515,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
         }}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="projections.add_goal.dialog"
         >
           <DialogHeader>

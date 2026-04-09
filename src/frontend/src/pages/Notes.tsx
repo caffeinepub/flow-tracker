@@ -207,7 +207,7 @@ function NoteEditor({
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2 pt-2">
+      <div className="flex gap-2 pt-2 pb-4">
         {!isNew && onDelete && (
           <Button
             variant="outline"
@@ -307,7 +307,7 @@ export function Notes() {
   };
 
   return (
-    <div className="pb-28 px-4 pt-2 animate-spring-in">
+    <div className="pb-nav-safe px-4 pt-2 animate-spring-in">
       {/* Search */}
       <div className="relative mb-4">
         <Search
@@ -430,7 +430,7 @@ export function Notes() {
       >
         <SheetContent
           side="bottom"
-          className="max-h-[92vh] overflow-y-auto rounded-t-3xl glass-card"
+          className="max-h-[92vh] overflow-y-auto pb-nav rounded-t-3xl glass-card"
           data-ocid="notes.sheet"
         >
           <SheetHeader className="mb-4">

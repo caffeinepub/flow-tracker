@@ -778,7 +778,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
   };
 
   return (
-    <div className="pb-24 px-4 pt-2 animate-spring-in">
+    <div className="pb-nav-safe px-4 pt-2 animate-spring-in">
       {/* CC Alerts */}
       {ccAlerts.length > 0 && (
         <div
@@ -1830,7 +1830,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         onOpenChange={(o) => !o && setHistoryAccount(null)}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.history.dialog"
         >
           <DialogHeader>
@@ -2377,7 +2377,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                 <X size={18} className="text-muted-foreground" />
               </button>
             </div>
-            <div className="space-y-3 flex-1 overflow-y-auto">
+            <div className="space-y-3 flex-1 overflow-y-auto pb-20">
               <div>
                 <Label className="text-xs">Name</Label>
                 <input
@@ -2452,7 +2452,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2 pt-3 flex-shrink-0">
+            <div className="flex gap-2 pt-3 pb-4 flex-shrink-0">
               <Button
                 variant="outline"
                 className="flex-1"
@@ -2538,7 +2538,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
               style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
             >
               <div
-                className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto pb-24"
+                className="w-full max-w-lg rounded-t-3xl p-5 max-h-[80vh] overflow-y-auto pb-nav-safe"
                 style={{ backgroundColor: "oklch(var(--card))" }}
                 data-ocid="accounts.sub_account_history.sheet"
               >
@@ -2646,7 +2646,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
       {/* Add Account Dialog */}
       <Dialog open={showAdd} onOpenChange={setShowAdd}>
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.add.dialog"
         >
           <DialogHeader>
@@ -2969,7 +2969,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         onOpenChange={(o) => !o && setEditAccount(null)}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.edit.dialog"
         >
           <DialogHeader>
@@ -3116,7 +3116,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         onOpenChange={(o) => !o && setShowAddIOU(false)}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.iou.add.dialog"
         >
           <DialogHeader>
@@ -3259,7 +3259,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         onOpenChange={(o) => !o && setShowAddBorrowedIOU(false)}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.iou.borrow.dialog"
         >
           <DialogHeader>
@@ -3399,7 +3399,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         onOpenChange={(o) => !o && setRepayingIOU(null)}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.iou.repay.dialog"
         >
           <DialogHeader>
@@ -3515,7 +3515,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         onOpenChange={(o) => !o && setRepayBorrowedIOU(null)}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.iou.repay_borrowed.dialog"
         >
           <DialogHeader>
@@ -3645,7 +3645,7 @@ export function Accounts({ privacyMode = false }: AccountsProps) {
         }}
       >
         <DialogContent
-          className="max-h-[90vh] overflow-y-auto"
+          className="max-h-[90vh] overflow-y-auto pb-nav"
           data-ocid="accounts.iou.edit.dialog"
         >
           <DialogHeader>

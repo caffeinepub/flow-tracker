@@ -288,7 +288,7 @@ export function History({
     "flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all glass-card-sm text-muted-foreground border-0 hover:text-foreground";
 
   return (
-    <div className="pb-24 animate-spring-in">
+    <div className="pb-nav-safe animate-spring-in">
       <Tabs defaultValue="transactions" className="w-full">
         {/* Tab header */}
         <div className="px-4 pt-2">
@@ -666,7 +666,7 @@ export function History({
         }}
       >
         <DialogContent
-          className="glass-card max-h-[90vh] overflow-y-auto border-0"
+          className="glass-card max-h-[90vh] overflow-y-auto pb-nav border-0"
           data-ocid="history.edit.dialog"
         >
           <DialogHeader>

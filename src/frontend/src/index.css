@@ -26,6 +26,7 @@
 @layer base {
   :root {
     --radius: 1rem;
+    --bottom-nav-height: 4rem; /* 64px = h-16 */
 
     /* Cyber-Neutral Light Mode */
     --background: 0.98 0.002 240;
@@ -345,6 +346,20 @@
 }
 
 @layer utilities {
+  /* ── Bottom-nav clearance ──────────────────────────────────────── */
+  /* Use pb-nav on any scrollable container whose bottom action must
+     remain visible above the fixed bottom navigation bar (h-16 = 64px). */
+  .pb-nav {
+    padding-bottom: calc(var(--bottom-nav-height) + 1rem); /* 80px */
+  }
+  /* pb-nav-safe also accounts for iOS safe-area-inset-bottom */
+  .pb-nav-safe {
+    padding-bottom: max(
+      calc(var(--bottom-nav-height) + 1rem),
+      calc(env(safe-area-inset-bottom) + var(--bottom-nav-height))
+    );
+  }
+
   /* Font family utilities */
   .font-display {
     font-family: "Space Grotesk", system-ui, sans-serif;

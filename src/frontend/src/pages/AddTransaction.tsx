@@ -460,7 +460,7 @@ export function AddTransaction({
   };
 
   return (
-    <div className="pb-24 px-4 pt-2 animate-spring-in">
+    <div className="pb-nav-safe px-4 pt-2 animate-spring-in">
       <div className="flex items-center gap-2 mb-6">
         <h1 className="text-xl font-display font-bold text-foreground flex-1">
           {t("addTransaction")}

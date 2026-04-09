@@ -485,6 +485,8 @@ export function useFinanceData() {
   /**
    * Delete a transaction and reverse its balance effect on the associated account.
    * Uses a nested functional updater so balances are always read from fresh state.
+   * For Save to Goal transactions (income-type with goalId), the account credit
+   * is reversed by debiting the linked account.
    */
   const deleteTransaction = useCallback(
     (id: string) => {
@@ -529,6 +531,8 @@ export function useFinanceData() {
               accs.map((a) => {
                 const [parentId, subId] = txAccount.split(">");
                 if (a.id !== parentId) return a;
+                // income (including Save to Goal credits) → debit to reverse
+                // expense → credit to reverse
                 const delta =
                   tx.type === "expense"
                     ? fullReversal
@@ -553,13 +557,14 @@ export function useFinanceData() {
                   tx.type === "expense"
                     ? fullReversal // add back the full debited amount
                     : tx.type === "income"
-                      ? -tx.amount // deduct what was credited
+                      ? -tx.amount // deduct what was credited (includes Save to Goal)
                       : 0;
                 return { ...a, balance: a.balance + delta };
               }),
             );
           }
         }
+        // Return a new array (not a mutation) so React detects the change
         return prev.filter((t) => t.id !== id);
       });
     },
@@ -1154,9 +1159,109 @@ export function useFinanceData() {
 
   const deleteGoal = useCallback(
     (id: string) => {
+      // Read goals and transactions synchronously so we can compute reversals
+      // before any state updates fire.
+      const currentGoals: Goal[] = JSON.parse(
+        localStorage.getItem("sft_goals") ?? "[]",
+      );
+      const currentTxs: Transaction[] = JSON.parse(
+        localStorage.getItem("sft_transactions") ?? "[]",
+      );
+
+      const goal = currentGoals.find((g) => g.id === id);
+
+      // Collect all transaction IDs linked to this goal (Save to Goal entries)
+      const linkedTxIds = currentTxs
+        .filter((tx) => tx.goalId === id)
+        .map((tx) => tx.id);
+
+      // Reverse account balances for every linked Save to Goal transaction
+      for (const tx of currentTxs.filter((tx) => tx.goalId === id)) {
+        if (!tx.account) continue;
+        const isSubAccount = tx.account.includes(">");
+        // These are income-type entries (credit to account) — reverse by debiting
+        if (isSubAccount) {
+          const [parentId, subId] = tx.account.split(">");
+          setAccounts((accs) =>
+            accs.map((a) => {
+              if (a.id !== parentId) return a;
+              return {
+                ...a,
+                subAccounts: (a.subAccounts ?? []).map((s) =>
+                  s.id === subId ? { ...s, balance: s.balance - tx.amount } : s,
+                ),
+              };
+            }),
+          );
+        } else {
+          setAccounts((accs) =>
+            accs.map((a) => {
+              const matches = a.name === tx.account || a.id === tx.account;
+              if (!matches) return a;
+              return { ...a, balance: a.balance - tx.amount };
+            }),
+          );
+        }
+      }
+
+      // Reverse alreadySavedAmount from the linked account (if set and not
+      // already covered by a linked transaction above)
+      if (
+        goal?.alreadySavedAmount &&
+        goal.alreadySavedAmount > 0 &&
+        goal.alreadySavedAccountId
+      ) {
+        const accountId = goal.alreadySavedAccountId;
+        const amount = goal.alreadySavedAmount;
+        // Only reverse if there is no linked transaction covering the opening
+        // amount (i.e. no tx with goalId matches — the opening tx is stored
+        // without goalId on older data, but with one on newer data).
+        // To be safe: check if total of linked tx amounts already accounts for it.
+        const linkedTxTotal = currentTxs
+          .filter((tx) => tx.goalId === id)
+          .reduce((s, tx) => s + tx.amount, 0);
+        // If the linked transactions cover more or equal to alreadySavedAmount,
+        // the account was already credited via those transactions — skip.
+        // Otherwise reverse the difference (handles old data without goalId on opening tx).
+        const alreadyCovered = linkedTxTotal >= amount;
+        if (!alreadyCovered) {
+          const isSubAccount = accountId.includes(">");
+          if (isSubAccount) {
+            const [parentId, subId] = accountId.split(">");
+            setAccounts((accs) =>
+              accs.map((a) => {
+                if (a.id !== parentId) return a;
+                return {
+                  ...a,
+                  subAccounts: (a.subAccounts ?? []).map((s) =>
+                    s.id === subId ? { ...s, balance: s.balance - amount } : s,
+                  ),
+                };
+              }),
+            );
+          } else {
+            setAccounts((accs) =>
+              accs.map((a) => {
+                const matches = a.name === accountId || a.id === accountId;
+                if (!matches) return a;
+                return { ...a, balance: a.balance - amount };
+              }),
+            );
+          }
+        }
+      }
+
+      // Remove all linked transactions from history
+      if (linkedTxIds.length > 0) {
+        setTransactions((prev) =>
+          prev.filter((tx) => !linkedTxIds.includes(tx.id)),
+        );
+      }
+
+      // Remove the goal itself
       setGoals((prev) => prev.filter((g) => g.id !== id));
     },
-    [setGoals],
+    [setGoals, setAccounts, setTransactions],
   );
 
   const updateProjectionSettings = useCallback(

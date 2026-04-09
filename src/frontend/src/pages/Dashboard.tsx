@@ -433,8 +433,10 @@ export function Dashboard({ onNavigate, privacyMode = false }: DashboardProps) {
         const monthly =
           allSubsForGoals.find((s) => s.id === goal.subCategoryId)
             ?.monthlyBudget ?? projectionSettings.monthlyIncome * 0.2;
+        // Save to Goal transactions are stored as type "income" (they credit the account).
+        // Match by goalId — no type filter needed since goalId is only set on goal-linked txs.
         const linkedTxSum = allTransactions
-          .filter((tx) => tx.goalId === goal.id && tx.type === "expense")
+          .filter((tx) => tx.goalId === goal.id)
           .reduce((s, tx) => s + tx.amount, 0);
         const saved = (goal.alreadySavedAmount ?? 0) + linkedTxSum;
         const rem = Math.max(0, goal.targetAmount - saved);
@@ -445,7 +447,7 @@ export function Dashboard({ onNavigate, privacyMode = false }: DashboardProps) {
         const monthsToReach =
           rem <= 0 ? 0 : monthly > 0 ? Math.ceil(rem / monthly) : null;
         const goalTxHistory = allTransactions
-          .filter((tx) => tx.goalId === goal.id && tx.type === "expense")
+          .filter((tx) => tx.goalId === goal.id)
           .sort((a, b) => b.date.localeCompare(a.date));
         return {
           goal,

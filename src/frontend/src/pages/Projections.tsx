@@ -379,8 +379,10 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
   const getGoalInfo = (goal: Goal) => {
     const monthly =
       allSubs.find((s) => s.id === goal.subCategoryId)?.monthlyBudget ?? 0;
+    // Save to Goal transactions are stored as type "income" (they credit the account).
+    // Match by goalId only — no type filter, since goalId is only set on goal-linked txs.
     const linkedTxSum = transactions
-      .filter((tx) => tx.goalId === goal.id && tx.type === "expense")
+      .filter((tx) => tx.goalId === goal.id)
       .reduce((sum, tx) => sum + tx.amount, 0);
     const saved = (goal.alreadySavedAmount ?? 0) + linkedTxSum;
     const remaining = Math.max(0, goal.targetAmount - saved);
@@ -395,10 +397,11 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
         reachDate: null,
         remaining,
         progressPct,
+        saved,
       };
     const monthsToReach = remaining <= 0 ? 0 : Math.ceil(remaining / monthly);
     const reachDate = addMonths(new Date(), monthsToReach);
-    return { monthsToReach, monthly, reachDate, remaining, progressPct };
+    return { monthsToReach, monthly, reachDate, remaining, progressPct, saved };
   };
 
   const minIncome = Math.round(defaultSalary * 0.5);
@@ -967,8 +970,10 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                     reachDate,
                     remaining,
                     progressPct,
+                    saved,
                   } = getGoalInfo(goal);
-                  const hasSaved = (goal.currentSaved ?? 0) > 0;
+                  // Use computed saved (alreadySavedAmount + linked tx sum) as source of truth
+                  const hasSaved = saved > 0;
                   return (
                     <div
                       key={goal.id}
@@ -991,8 +996,7 @@ export function Projections({ privacyMode = false }: ProjectionsProps) {
                                 className="h-1.5 mt-2 mb-1"
                               />
                               <p className="text-[10px] text-muted-foreground">
-                                Saved: {pAmt(goal.currentSaved ?? 0)} /{" "}
-                                {pAmt(goal.targetAmount)}{" "}
+                                Saved: {pAmt(saved)} / {pAmt(goal.targetAmount)}{" "}
                                 <span
                                   style={{ color: "oklch(var(--primary))" }}
                                 >
